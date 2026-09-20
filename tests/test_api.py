@@ -274,6 +274,28 @@ def test_origem_externa_e_content_type_incorreto_bloqueados(api, captura):
     assert response.status_code == 415 and contar(api, Sessao) == 0
 
 
+def test_cors_permite_cliente_web_em_origem_separada(api):
+    origin = 'http://127.0.0.1:5500'
+    preflight = api.client.options('/api/autenticacao/credenciais', headers={
+        'Origin': origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+    })
+    assert preflight.status_code == 200
+    assert preflight.headers['access-control-allow-origin'] == origin
+    assert preflight.headers['access-control-allow-credentials'] == 'true'
+
+    response = api.client.get('/api/saude', headers={'Origin': origin})
+    assert response.status_code == 200
+    assert response.headers['access-control-allow-origin'] == origin
+    assert response.headers['access-control-allow-credentials'] == 'true'
+
+
+def test_backend_nao_serve_arquivos_da_interface(api):
+    assert api.client.get('/cadastro.html').status_code == 404
+    assert api.client.get('/static/style.css').status_code == 404
+
+
 def test_corpo_grande_rejeitado_com_e_sem_content_length(api):
     from app.main import MAX_BODY
     response = api.client.post('/api/autenticacao/verificar', content=b'{}',

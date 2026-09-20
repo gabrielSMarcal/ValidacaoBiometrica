@@ -1,6 +1,6 @@
 # APS - API de autenticacao facial
 
-API REST em Python 3.12, FastAPI e MySQL para cadastro e autenticacao biometrica facial. Este repositorio contem a API, os testes automatizados e os scripts de operacao. A interface web usada nos testes manuais nao faz parte do projeto publicado.
+API REST em Python 3.12, FastAPI e MySQL para cadastro e autenticacao biometrica facial. O diretorio `web/` contem somente um cliente independente para testes manuais. A API nao entrega HTML, CSS ou JavaScript e pode ser consumida por qualquer outro cliente HTTP, como um aplicativo Flutter ou Kotlin.
 
 O processamento usa tecnicas classicas de imagem, sem detector de rostos, rede neural ou pesos pre-treinados. A biometria e experimental: o sistema nao comprova presenca de uma pessoa viva e nao deve ser usado sozinho para proteger recursos reais.
 
@@ -65,6 +65,23 @@ Verifique a conexao com o banco em `GET /api/saude`. O script abaixo executa uma
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.verificar_mysql
 ```
+
+## Executar o cliente web de teste
+
+Mantenha a API ativa na porta 8000 e sirva o diretorio `web/` separadamente. Com a extensao Live Server do VS Code, abra `web/cadastro.html` e use **Open with Live Server**. A URL esperada e uma destas:
+
+- http://127.0.0.1:5500/web/example.html, quando o Live Server usa a raiz do repositorio;
+- http://127.0.0.1:5500/example.html, quando ele usa `web/` como raiz.
+
+Tambem e possivel iniciar um servidor estatico sem extensoes:
+
+```powershell
+.\.venv\Scripts\python.exe -m http.server 5500 --bind 127.0.0.1 --directory web
+```
+
+Depois, acesse http://127.0.0.1:5500/example.html. Os caminhos de CSS, JavaScript e navegacao sao relativos, portanto o front nao depende das rotas do FastAPI. `web/api.js` concentra todas as requisicoes e `web/config.js` define o endereco da API.
+
+O hostname do front e reutilizado por padrao no endereco da API. Se o front for publicado em outro ambiente, ajuste `API_BASE_URL` em `web/config.js` e inclua a origem exata em `ALLOWED_ORIGINS` no `.env` da API. Como a autenticacao usa cookies HttpOnly, clientes devem preservar cookies entre as duas etapas.
 
 ## Endpoints
 
@@ -135,6 +152,7 @@ Os testes verificam contratos, processamento, criptografia, sessoes, logs, limit
 | `scripts/verificar_mysql.py` | Verificacao integrada do banco |
 | `tests/` | Testes automatizados |
 | `docs/` | Documentacao tecnica do processamento |
+| `web/` | Cliente HTML/CSS/JS independente para testes manuais |
 
 ## Seguranca
 

@@ -1,4 +1,3 @@
-"""Rotas da API, transações e páginas mínimas de teste."""
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -10,6 +9,7 @@ from uuid import uuid4
 from cryptography.exceptions import InvalidTag
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -28,7 +28,7 @@ MAX_BODY = 8 * 1024 * 1024
 
 
 class ProtecoesHTTP:
-    """Limita bytes antes do parser; bloqueia origens externas e rajadas locais.
+    """Limita bytes antes do parser; bloqueia origens não autorizadas e rajadas.
 
     Limite em memória por IP/processo: executar um worker nesta demonstração.
     """
@@ -55,13 +55,12 @@ class ProtecoesHTTP:
                     (b'permissions-policy', b'camera=(self), microphone=()'),
                     (b'x-request-id', scope['state']['requisicao_id'].encode()),
                 ]
-                if scope['path'] in ('/cadastro', '/validacao', '/nivel') or scope['path'].startswith('/static/'):
-                    message['headers'].append((b'content-security-policy', b"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"))
             await send(message)
 
         if api_write:
             origin = headers.get(b'origin', b'').decode('latin-1').rstrip('/')
-            if (origin and origin not in self.settings.origins) or headers.get(b'sec-fetch-site') == b'cross-site':
+            site = headers.get(b'sec-fetch-site')
+            if (origin and origin not in self.settings.origins) or (not origin and site == b'cross-site'):
                 return await reject(403, 'Origem não autorizada.')
             if scope['path'] != '/api/sair' and headers.get(b'content-type', b'').split(b';')[0].strip().lower() != b'application/json':
                 return await reject(415, 'Envie application/json com quadros RGB da câmera.')
@@ -133,6 +132,13 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
     app.state.engine = db_engine
     app.add_middleware(ProtecoesHTTP, settings=settings)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost', '127.0.0.1', '[::1]', 'testserver'])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(settings.origins),
+        allow_credentials=True,
+        allow_methods=['GET', 'POST'],
+        allow_headers=['Accept', 'Content-Type'],
+    )
 
     def banco():
         with sessions() as session:
@@ -329,6 +335,8 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
     @app.get('/', include_in_schema=False)
     def inicio():
         return RedirectResponse('/docs')
+
+    return app
 
 
 app = criar_app()
