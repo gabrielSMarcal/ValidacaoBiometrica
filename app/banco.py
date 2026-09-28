@@ -23,8 +23,6 @@ class Usuario(Base):
                       {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'})
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # Não faz parte da identificação pública. Mantém o AAD dos BLOBs mesmo
-    # quando a chave primária muda de UUID para inteiro durante a migração.
     biometria_ref: Mapped[str] = mapped_column(String(36), unique=True, default=lambda: str(uuid4()))
     nome: Mapped[str] = mapped_column(String(120))
     cpf_indice: Mapped[str] = mapped_column(String(64), unique=True)
@@ -44,6 +42,7 @@ class Usuario(Base):
 
 
 class LogAcesso(Base):
+    
     __tablename__ = 'logs_acesso'
     __table_args__ = {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'}
 
@@ -57,6 +56,7 @@ class LogAcesso(Base):
 
 
 class Sessao(Base):
+    
     __tablename__ = 'sessoes'
     __table_args__ = {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'}
 
@@ -66,6 +66,7 @@ class Sessao(Base):
 
 
 class DesafioBiometrico(Base):
+    
     __tablename__ = 'desafios_biometricos'
     __table_args__ = {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'}
 
@@ -76,9 +77,11 @@ class DesafioBiometrico(Base):
 
 
 def criar_engine(settings: Settings):
+    
     return create_engine(settings.database_url, pool_pre_ping=True, pool_recycle=1800,
                          connect_args={'connect_timeout': 5}, hide_parameters=True)
 
 
 def fabrica_sessoes(engine):
+    
     return sessionmaker(bind=engine, expire_on_commit=False)

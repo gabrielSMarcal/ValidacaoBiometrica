@@ -41,10 +41,9 @@ def test_pipeline_gera_assinatura_json_e_resumo_das_cinco_fases():
     frame = quadro_sintetico()
     assinatura, resumo = processar_captura([frame] * 3)
     assert assinatura["algoritmo"] == ALGORITMO
-    assert assinatura["dimensao"] == DIMENSAO == 1136
+    assert assinatura["dimensao"] == DIMENSAO == 1280
     assert len(assinatura["vetor"]) == DIMENSAO
-    assert sum(assinatura["vetor"]) == pytest.approx(1, abs=1e-7)
-    assert all(valor >= 0 for valor in assinatura["vetor"])
+    assert np.linalg.norm(assinatura["vetor"]) == pytest.approx(1, abs=1e-7)
     assert len(resumo["etapas"]) == 5
     assert len(resumo["qualidade"]) == 3
     assert resumo["maior_distancia_entre_quadros"] == 0
@@ -149,7 +148,7 @@ def test_classificacao_rejeita_limiares_invalidos(valor):
 
 
 @pytest.mark.parametrize("alteracao", [
-    {"versao": 2}, {"algoritmo": "outro"}, {"dimensao": 1}, {"vetor": []},
+    {"versao": 3}, {"algoritmo": "outro"}, {"dimensao": 1}, {"vetor": []},
     {"vetor": [float("nan")] * DIMENSAO}, {"vetor": [0] * DIMENSAO},
     {"vetor": ["0.001"] * DIMENSAO}, {"vetor": [-1] * DIMENSAO},
 ])
