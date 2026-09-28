@@ -1,8 +1,8 @@
 # APS - API de autenticacao facial
 
-API REST em Python 3.12, FastAPI e MySQL para cadastro e autenticacao biometrica facial. O diretorio `web/` contem somente um cliente independente para testes manuais. A API nao entrega HTML, CSS ou JavaScript e pode ser consumida por qualquer outro cliente HTTP, como um aplicativo Flutter ou Kotlin.
+API em Python 3.12, FastAPI, TensorFlow e MySQL para cadastro e autenticacao biometrica facial.
 
-O processamento usa tecnicas classicas de imagem, sem detector de rostos, rede neural ou pesos pre-treinados. A biometria e experimental: o sistema nao comprova presenca de uma pessoa viva e nao deve ser usado sozinho para proteger recursos reais.
+O processamento em `app/biometria.py` usa TensorFlow e MobileNetV2 com pesos ImageNet para extrair um embedding de 1.280 componentes da regiao facial guiada. A biometria e experimental: o sistema nao comprova presenca de uma pessoa viva e nao deve ser usado sozinho para proteger recursos reais.
 
 ## Requisitos
 
@@ -66,29 +66,16 @@ Verifique a conexao com o banco em `GET /api/saude`. O script abaixo executa uma
 .\.venv\Scripts\python.exe -m scripts.verificar_mysql
 ```
 
-## Executar o cliente web de teste
-
-Mantenha a API ativa na porta 8000 e sirva o diretorio `web/` separadamente. Com a extensao Live Server do VS Code, abra `web/cadastro.html` e use **Open with Live Server**. A URL esperada e uma destas:
-
-- http://127.0.0.1:5500/web/example.html, quando o Live Server usa a raiz do repositorio;
-- http://127.0.0.1:5500/example.html, quando ele usa `web/` como raiz.
-
-Tambem e possivel iniciar um servidor estatico sem extensoes:
-
-```powershell
-.\.venv\Scripts\python.exe -m http.server 5500 --bind 127.0.0.1 --directory web
-```
-
-Depois, acesse http://127.0.0.1:5500/example.html. Os caminhos de CSS, JavaScript e navegacao sao relativos, portanto o front nao depende das rotas do FastAPI. `web/api.js` concentra todas as requisicoes e `web/config.js` define o endereco da API.
-
-O hostname do front e reutilizado por padrao no endereco da API. Se o front for publicado em outro ambiente, ajuste `API_BASE_URL` em `web/config.js` e inclua a origem exata em `ALLOWED_ORIGINS` no `.env` da API. Como a autenticacao usa cookies HttpOnly, clientes devem preservar cookies entre as duas etapas.
-
 ## Endpoints
 
 | Metodo | Rota | Finalidade |
 | --- | --- | --- |
 | `GET` | `/api/saude` | Verifica a disponibilidade do banco |
 | `POST` | `/api/usuarios` | Cadastra um usuario e sua assinatura biometrica |
+| `GET` | `/api/usuarios` | Lista os dados de gerenciamento dos usuarios |
+| `PATCH` | `/api/usuarios/{id}` | Edita nome, nivel, status ou senha |
+| `PUT` | `/api/usuarios/{id}/biometria` | Recadastra a assinatura pela camera |
+| `DELETE` | `/api/usuarios/{id}` | Exclui o usuario e revoga seus acessos |
 | `POST` | `/api/autenticacao/credenciais` | Valida CPF e senha e emite um desafio curto |
 | `POST` | `/api/autenticacao/verificar` | Verifica os quadros contra a assinatura do desafio |
 | `GET` | `/api/sessao` | Consulta o usuario da sessao atual |
@@ -143,7 +130,7 @@ Os testes verificam contratos, processamento, criptografia, sessoes, logs, limit
 | Local | Responsabilidade |
 | --- | --- |
 | `app/main.py` | Rotas, transacoes, sessoes e protecoes HTTP |
-| `app/biometria.py` | Processamento, descritor e comparacao das capturas |
+| `app/biometria.py` | Qualidade, recorte, TensorFlow, embedding e comparacao |
 | `app/banco.py` | Modelos SQLAlchemy e conexao com o banco |
 | `app/seguranca.py` | AES-GCM, HMAC, Argon2id e tokens |
 | `app/esquemas.py` | Validacao dos dados recebidos pela API |
@@ -152,12 +139,11 @@ Os testes verificam contratos, processamento, criptografia, sessoes, logs, limit
 | `scripts/verificar_mysql.py` | Verificacao integrada do banco |
 | `tests/` | Testes automatizados |
 | `docs/` | Documentacao tecnica do processamento |
-| `web/` | Cliente HTML/CSS/JS independente para testes manuais |
 
 ## Seguranca
 
 As assinaturas biometricas e os CPFs sao cifrados com AES-256-GCM. O CPF tambem possui um indice HMAC para busca sem armazenamento em texto claro. Senhas usam Argon2id; tokens de sessao e desafios sao armazenados apenas como hashes.
 
-Respostas e logs nao incluem senha, CPF, token, imagem, pixels ou vetor biometrico. Em producao, use HTTPS e configure `COOKIE_SECURE=true`. A chave `BIOMETRIC_KEY` deve ser mantida em segredo e preservada junto aos dados cifrados.
+Respostas e logs nao incluem senha, CPF, token, imagem, pixels ou vetor biometrico. A chave `BIOMETRIC_KEY` deve ser mantida em segredo e preservada junto aos dados cifrados.
 
-Esta API nao implementa prova de vida, deteccao de apresentacao, gerenciamento de permissoes ou rotacao automatica de chaves.
+Esta API nao implementa prova de vida, deteccao de apresentacao, gerenciamento de permissoes ou rotacao automatica de chaves. Assinaturas da versao anterior (`aps-lbp59-gradientes-v1`) sao incompatíveis com o embedding TensorFlow e precisam ser recadastradas.

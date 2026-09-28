@@ -84,7 +84,7 @@ def test_cadastro_pipeline_cifra_banco_e_logs_sem_dados_crus(api, captura):
         user = db.scalar(select(Usuario))
         assert isinstance(user.assinatura_cifrada, bytes) and b'vetor' not in user.assinatura_cifrada
         sig = api.seguranca.decifrar(user.assinatura_cifrada, user.biometria_ref, 'biometria')
-        assert sig['dimensao'] == len(sig['vetor']) == 1136
+        assert sig['dimensao'] == len(sig['vetor']) == 1280
         assert api.seguranca.decifrar(user.cpf_cifrado, user.biometria_ref, 'cpf') == {'cpf': CPF_TESTE}
         assert CPF_TESTE.encode() not in user.cpf_cifrado and CPF_TESTE not in user.cpf_indice
         assert api.seguranca.verificar_senha(SENHA_TESTE, user.senha_hash)
@@ -311,5 +311,25 @@ def test_saude_confere_banco_e_deixa_limite_biometrico_explicito(api):
     response = api.client.get('/api/saude')
     assert response.status_code == 200
     assert response.json()['banco'] == 'ok' and response.json()['prova_de_vida'] is False
+    assert response.json()['framework'] == 'TensorFlow'
     assert response.headers['cache-control'] == 'no-store'
+
+
+def test_crud_de_usuarios_e_recadastro_biometrico(api, captura, outra_captura):
+    assert cadastrar(api, captura).status_code == 201
+    lista = api.client.get('/api/usuarios')
+    assert lista.status_code == 200
+    assert lista.json()['usuarios'][0]['nome'] == 'Pessoa de Teste'
+    atualizada = api.client.patch('/api/usuarios/1', json={
+        'nome': 'Pessoa Editada', 'nivel': 3, 'ativo': False,
+    })
+    assert atualizada.status_code == 200
+    assert atualizada.json()['usuario']['nome'] == 'Pessoa Editada'
+    assert atualizada.json()['usuario']['ativo'] is False
+    biometria = api.client.put('/api/usuarios/1/biometria', json=outra_captura)
+    assert biometria.status_code == 200
+    assert biometria.json()['processamento']['modelo'].startswith('TensorFlow')
+    exclusao = api.client.delete('/api/usuarios/1')
+    assert exclusao.status_code == 204 and exclusao.content == b''
+    assert api.client.get('/api/usuarios').json() == {'usuarios': []}
 

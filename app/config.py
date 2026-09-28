@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
+    
     model_config = SettingsConfigDict(env_file=ROOT / '.env', env_file_encoding='utf-8', extra='ignore')
 
     db_host: str = '127.0.0.1'
@@ -26,14 +27,18 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=20, ge=1, le=300)
 
     @field_validator('biometric_key')
+    
     @classmethod
     def valid_key(cls, value: SecretStr) -> SecretStr:
+    
         try:
             raw = base64.b64decode(value.get_secret_value(), altchars=b'-_', validate=True)
             if len(raw) != 32:
                 raise ValueError
+    
         except (ValueError, TypeError) as exc:
             raise ValueError('BIOMETRIC_KEY deve conter 32 bytes em base64. Execute scripts/configurar.py.') from exc
+    
         return value
 
     @property
