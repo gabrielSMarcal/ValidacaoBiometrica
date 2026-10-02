@@ -1,0 +1,82 @@
+:host {
+  display: block;
+}
+
+.login {
+  box-sizing: border-box;
+  width: min(100% - 3rem, 28rem);
+  min-height: 24rem;
+  margin: 4rem auto;
+  padding: 2rem;
+  border: 1px solid rgba(15, 52, 35, 0.12);
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1.25rem 3rem rgba(7, 25, 16, 0.1);
+}
+
+.login h2 {
+  margin: 0 0 1.5rem;
+  color: #0b1f17;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  line-height: 1.15;
+  text-align: center;
+}
+
+.login form {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.login label {
+  color: #31443a;
+  font-weight: 700;
+}
+
+.login input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.875rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid rgba(15, 52, 35, 0.28);
+  border-radius: 0.625rem;
+  background: #fff;
+  color: #0b1f17;
+  font: inherit;
+}
+
+.login input:focus-visible {
+  outline: 3px solid rgba(15, 90, 60, 0.28);
+  outline-offset: 2px;
+  border-color: #0f5a3c;
+}
+
+.login button {
+  min-height: 2.875rem;
+  margin-top: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid #0f5a3c;
+  border-radius: 999px;
+  background: #0f5a3c;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.login button:hover {
+  background: #0b472f;
+}
+
+.login button:focus-visible {
+  outline: 3px solid rgba(15, 90, 60, 0.28);
+  outline-offset: 3px;
+}
+
+@media (max-width: 30rem) {
+  .login {
+    width: min(100% - 2rem, 28rem);
+    margin: 2rem auto;
+    padding: 1.5rem;
+  }
+}

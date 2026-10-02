@@ -1,0 +1,91 @@
+<main class="home" id="main-content">
+  <div id="sobre"></div>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <p class="eyebrow">Governo Federal · Ministério do Meio Ambiente e Mudança do Clima</p>
+      <h1 id="hero-title">Políticas públicas para um Brasil verde, justo e resiliente.</h1>
+      <p class="lead">
+        Este é o ponto de entrada para ações de proteção da biodiversidade, enfrentamento da crise climática e
+        promoção de uma transição ecológica que alcance todo o país.
+      </p>
+
+      <div class="hero-actions">
+        <a class="button button-primary" href="#prioridades">Ver prioridades</a>
+        <a class="button button-secondary" href="#servicos">Acessar serviços</a>
+      </div>
+
+      <dl class="impact">
+        <div>
+          <dt>Biomas</dt>
+          <dd>6 biomas integrados em políticas de conservação</dd>
+        </div>
+        <div>
+          <dt>Clima</dt>
+          <dd>Dados e planos para adaptação e mitigação</dd>
+        </div>
+        <div>
+          <dt>Sociedade</dt>
+          <dd>Participação social e transparência como padrão</dd>
+        </div>
+      </dl>
+    </div>
+
+    <aside class="hero-panel" aria-label="Compromissos estratégicos">
+      <p class="panel-kicker">Agenda prioritária</p>
+      <h2>Compromissos para a transformação ambiental</h2>
+      <ul class="commitments">
+        @for (commitment of commitments; track commitment) {
+          <li>{{ commitment }}</li>
+        }
+      </ul>
+    </aside>
+  </section>
+
+  <section class="section" id="prioridades" aria-labelledby="priorities-title">
+    <div class="section-heading">
+      <p class="eyebrow">Eixos de atuação</p>
+      <h2 id="priorities-title">Prioridades para proteger o presente e preparar o futuro</h2>
+    </div>
+
+    <div class="card-grid">
+      @for (priority of priorities; track priority.title) {
+        <article class="card">
+          <p class="card-eyebrow">{{ priority.eyebrow }}</p>
+          <h3>{{ priority.title }}</h3>
+          <p>{{ priority.description }}</p>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="section section-alt" id="servicos" aria-labelledby="services-title">
+    <div class="section-heading">
+      <p class="eyebrow">Serviços e informações</p>
+      <h2 id="services-title">Uma base simples para organizar atendimento, dados e participação</h2>
+    </div>
+
+    <div class="service-list">
+      @for (service of services; track service.title) {
+        <article class="service">
+          <h3>{{ service.title }}</h3>
+          <p>{{ service.description }}</p>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="section" id="participacao" aria-labelledby="participation-title">
+    <div class="section-heading">
+      <p class="eyebrow">Participação social</p>
+      <h2 id="participation-title">Um portal para ampliar a escuta da sociedade</h2>
+    </div>
+
+    <div class="participation">
+      <p>
+        A agenda ambiental depende de colaboração entre União, estados, municípios, setor produtivo, academia e
+        sociedade civil. Este modelo destaca informação clara, navegação direta e espaço para ações coletivas.
+      </p>
+      <a class="button button-primary" href="#top">Voltar ao início</a>
+    </div>
+  </section>
+</main>

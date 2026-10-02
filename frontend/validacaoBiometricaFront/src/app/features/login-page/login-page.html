@@ -1,0 +1,24 @@
+<div class="login">
+  <h2>Login</h2>
+    <form (ngSubmit)="onSubmit()">
+      <label for="cpf">CPF:</label>
+      <input
+      id="cpf"
+      name="cpf"
+      type="text"
+      [(ngModel)]="cpf"
+      required
+      />
+
+      <label for="password">Password:</label>
+      <input
+      id="password"
+      name="password"
+      type="password"
+      [(ngModel)]="password"
+      required
+      />
+
+      <button type="submit">Entrar</button>
+    </form>
+</div>
