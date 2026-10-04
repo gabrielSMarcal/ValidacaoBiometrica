@@ -8,7 +8,7 @@ O processamento em `app/biometria.py` usa TensorFlow e MobileNetV2 com pesos Ima
 
 - Python 3.12
 - MySQL 8+ ou MariaDB para uma instalacao nova
-- MySQL ativo e uma conta com acesso ao banco (permissão CREATE na primeira inicialização)
+- Uma chave `BIOMETRIC_KEY` com 32 bytes codificados em base64
 
 As dependencias da aplicacao estao em `requirements.txt`. As dependencias adicionais para testes estao em `requirements-dev.txt`.
 
@@ -22,29 +22,13 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ```
 
-Com o MySQL local ativo, prepare o banco e as tabelas:
-
-```powershell
-.\.venv\Scripts\python.exe -m app.inicializar
-```
-
-Não é necessário `.env` nem `.env.example`. Em uma instalação nova, a conexão padrão é `127.0.0.1:3306`, banco `aps_facial`, usuário `root`, senha vazia (comum no MySQL local do XAMPP). Se o servidor usa outra conta ou senha, informe as credenciais reais por variáveis de ambiente antes de inicializar:
-
-```powershell
-$env:DB_USER = "seu_usuario_mysql"
-$env:DB_PASSWORD = "sua_senha"
-.\.venv\Scripts\python.exe -m app.inicializar
-```
-
-O inicializador cria o banco configurado somente se ele não existir, depois cria as tabelas ausentes, preservando dados. Não instala nem inicia o servidor MySQL e não cria contas ou altera senhas. Um banco já existente não exige permissão para criar outros bancos. `iniciar.bat` também executa essa preparação antes de iniciar a API.
-
-Se preferir salvar a configuração em arquivo, execute o comando opcional:
+Gere a configuracao local:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\configurar.py
 ```
 
-Ele gera `.env` diretamente, sem template, e nunca sobrescreve um arquivo existente. Ajuste nele a conexão:
+O script cria `.env` sem sobrescrever um arquivo existente. Ajuste nele a senha e os dados do banco:
 
 ```dotenv
 DB_HOST=127.0.0.1
@@ -54,11 +38,13 @@ DB_USER=aps_app
 DB_PASSWORD=sua_senha
 ```
 
-Para um MySQL hospedado, basta mudar `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` e `DB_PASSWORD` no ambiente ou no `.env`, sem alterar o código. Variáveis do ambiente têm prioridade. Use a conta fornecida pela hospedagem. O arquivo `sql/criar_banco.sql` continua disponível como alternativa manual para provisionar a conta `aps_app`; ajuste a senha no SQL e na conexão.
+Prepare o banco executando `sql/criar_banco.sql` com uma conta administrativa. Depois crie as tabelas da versao atual:
 
-Quando `BIOMETRIC_KEY` não é informada, uma chave é gerada uma única vez em `.runtime/biometric.key` e reutilizada nas próximas execuções. Uma chave definida no ambiente ou no `.env` tem prioridade e nunca é substituída. O configurador utiliza essa mesma chave. Ao transferir um banco com dados cifrados para outra máquina/hospedagem, preserve a chave original e defina `BIOMETRIC_KEY` lá; uma chave nova não permite ler os dados antigos.
+```powershell
+.\.venv\Scripts\python.exe -m app.inicializar
+```
 
-Nao versione `.env`, `.runtime/biometric.key`, bancos, backups ou o ambiente virtual.
+Nao versione `.env`, `BIOMETRIC_KEY`, bancos, backups ou o ambiente virtual.
 
 ## Executar a API
 
