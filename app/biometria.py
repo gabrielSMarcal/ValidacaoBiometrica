@@ -148,13 +148,13 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any
     mascara_original = _mascara_eliptica(*regiao_cinza.shape)
     valores = regiao_cinza[mascara_original]
     media, contraste = float(valores.mean()), float(valores.std())
-    foco = float(laplaciano[mascara_original[1:-1, 1:-1]].std())
     saturacao = float(np.mean((valores <= 8) | (valores >= 247)))
     laplaciano = (
         regiao_cinza[:-2, 1:-1] + regiao_cinza[2:, 1:-1]
         + regiao_cinza[1:-1, :-2] + regiao_cinza[1:-1, 2:]
         - 4 * regiao_cinza[1:-1, 1:-1]
     )
+    foco = float(laplaciano[mascara_original[1:-1, 1:-1]].std())
     
     if not 35 <= media <= 225:
         raise BiometriaErro("Melhore a iluminação: evite ambiente escuro ou luz excessiva.")
