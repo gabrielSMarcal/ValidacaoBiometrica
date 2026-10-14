@@ -1,0 +1,39 @@
+<div class="login">
+  <h2>Login</h2>
+    <p>Entre com uma conta de demonstração para acessar a área restrita.</p>
+    <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
+      <label for="cpf">CPF:</label>
+      <input
+      id="cpf"
+      name="cpf"
+      type="text"
+      [(ngModel)]="cpf"
+      required
+      autocomplete="username"
+      />
+
+      <label for="password">Password:</label>
+      <input
+      id="password"
+      name="password"
+      type="password"
+      [(ngModel)]="password"
+      required
+      autocomplete="current-password"
+      />
+
+      <button type="submit" [disabled]="loginForm.invalid">Entrar</button>
+    </form>
+    @if (errorMessage) {
+      <p class="login-error" role="alert">{{ errorMessage }}</p>
+    }
+    <aside class="demo-accounts" aria-labelledby="demo-accounts-title">
+      <h3 id="demo-accounts-title">Contas de demonstração</h3>
+      <ul>
+        <li>Admin: CPF <strong>00000000001</strong> / senha <strong>admin123</strong></li>
+        <li>Nível 1: CPF <strong>00000000002</strong> / senha <strong>nivel1abc</strong></li>
+        <li>Nível 2: CPF <strong>00000000003</strong> / senha <strong>nivel2abc</strong></li>
+        <li>Nível 3: CPF <strong>00000000004</strong> / senha <strong>nivel3abc</strong></li>
+      </ul>
+    </aside>
+</div>

@@ -1,0 +1,48 @@
+:host {
+  display: block;
+}
+
+.face-recognition {
+  width: min(100% - 3rem, 52rem);
+  margin: 4rem auto;
+  padding: 3rem;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 1.25rem 3rem rgba(7, 25, 16, 0.1);
+}
+
+.eyebrow {
+  color: #0f5a3c;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.face-recognition h1 {
+  color: #0b1f17;
+}
+
+.face-recognition p:not(.eyebrow) {
+  color: #31443a;
+  font-size: 1.25rem;
+  line-height: 1.5;
+}
+
+.face-recognition button {
+  display: block;
+  min-height: 2.875rem;
+  margin: 2rem 0 1rem;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid #0f5a3c;
+  border-radius: 999px;
+  background: #0f5a3c;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.face-recognition button:focus-visible,
+.face-recognition a:focus-visible {
+  outline: 3px solid rgba(15, 90, 60, 0.28);
+  outline-offset: 3px;
+}

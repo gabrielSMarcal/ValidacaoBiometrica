@@ -1,0 +1,111 @@
+:host {
+  display: block;
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid rgba(15, 52, 35, 0.12);
+  background: rgba(248, 250, 245, 0.92);
+  backdrop-filter: blur(12px);
+}
+
+.navbar-inner,
+.mobile-nav {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1rem 1.5rem;
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.brand {
+  display: grid;
+  gap: 0.125rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-kicker {
+  color: #0f5a3c;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.brand-name {
+  color: #0b1f17;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.desktop-nav {
+  display: none;
+  align-items: center;
+  gap: 1rem;
+}
+
+.desktop-nav a,
+.mobile-nav a {
+  color: #31443a;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.desktop-nav a:hover,
+.desktop-nav a:focus-visible,
+.mobile-nav a:hover,
+.mobile-nav a:focus-visible,
+.brand:hover,
+.brand:focus-visible,
+.menu-button:hover,
+.menu-button:focus-visible {
+  color: #0f5a3c;
+}
+
+.menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid rgba(15, 52, 35, 0.16);
+  border-radius: 999px;
+  background: #fff;
+  color: #0b1f17;
+  font: inherit;
+  font-weight: 700;
+}
+
+.menu-button-label {
+  display: none;
+}
+
+.mobile-nav {
+  display: grid;
+  gap: 0.875rem;
+  padding-top: 0;
+}
+
+@media (min-width: 48rem) {
+  .desktop-nav {
+    display: flex;
+  }
+
+  .menu-button,
+  .mobile-nav {
+    display: none;
+  }
+
+  .menu-button-label {
+    display: inline;
+  }
+}

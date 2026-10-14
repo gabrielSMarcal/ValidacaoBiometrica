@@ -1,0 +1,10 @@
+<main class="dashboard" aria-labelledby="dashboard-title">
+  <p class="eyebrow">Área restrita</p>
+  <h1 id="dashboard-title">
+    Bem-vindo, {{ auth.currentUser()?.nome }}.
+  </h1>
+  <p class="welcome-message">
+    Bem-vindo usuário de nível {{ auth.currentUser()?.nivel }}.
+  </p>
+  <a routerLink="/">Voltar para o início</a>
+</main>
