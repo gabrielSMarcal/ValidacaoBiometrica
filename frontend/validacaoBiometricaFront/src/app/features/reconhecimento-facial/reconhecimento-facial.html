@@ -1,1 +1,9 @@
-<p>reconhecimento-facial works!</p>
+<main class="face-recognition" aria-labelledby="face-recognition-title">
+  <p class="eyebrow">Segunda etapa de acesso</p>
+  <h1 id="face-recognition-title">Reconhecimento facial</h1>
+  <p>
+    Olá, {{ auth.currentUser()?.nome }}. Posicione seu rosto diante da câmera para concluir a validação.
+  </p>
+  <button type="button" (click)="confirmarReconhecimento()">Simular reconhecimento facial</button>
+  <a routerLink="/login">Voltar para o login</a>
+</main>

@@ -1,12 +1,9 @@
-export interface Frame {
-  largura: number;
-  altura: number;
-  y0_base64: string;
-}
+import { Frame } from '../biometria/biometria.model';
 
 export interface UsuarioCadastro {
   frames: Frame[];
   cpf: string;
+  senha: string;
   nome: string;
   nivel: number;
 }

@@ -1,5 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+
+import { MockAuthService } from '../../core/services/mock-auth.service';
 
 @Component({
   imports: [FormsModule],
@@ -8,10 +11,22 @@ import { FormsModule } from '@angular/forms';
   templateUrl: './login-page.html',
 })
 export class LoginPage {
-  cpf: string = '';
-  password: string = '';
+  cpf = '';
+  password = '';
+  errorMessage = '';
 
-  onSubmit() {
-    console.log('cpf: ', this.cpf, 'pw: ', this.password)
+  private readonly auth = inject(MockAuthService);
+  private readonly router = inject(Router);
+
+  onSubmit(): void {
+    const user = this.auth.autenticar(this.cpf.trim(), this.password);
+
+    if (!user) {
+      this.errorMessage = 'CPF ou senha inválidos. Use uma das contas de demonstração.';
+      return;
+    }
+
+    this.errorMessage = '';
+    void this.router.navigateByUrl(user.nivel === -1 ? '/painel-admin' : '/reconhecimento-facial');
   }
 }

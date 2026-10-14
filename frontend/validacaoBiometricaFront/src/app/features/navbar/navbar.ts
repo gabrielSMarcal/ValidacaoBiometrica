@@ -8,7 +8,7 @@ import { RouterLink } from '@angular/router';
   templateUrl: './navbar.html',
 })
 export class Navbar {
-  protected readonly menuOpen = signal(false);
+  readonly menuOpen = signal(false);
 
   protected readonly links = [
     { label: 'Sobre', href: '#sobre' },

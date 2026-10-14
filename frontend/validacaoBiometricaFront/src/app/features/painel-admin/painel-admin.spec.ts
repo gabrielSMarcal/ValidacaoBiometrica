@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { PainelAdmin } from './painel-admin';
 
 describe('PainelAdmin', () => {
@@ -8,6 +9,7 @@ describe('PainelAdmin', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [PainelAdmin],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PainelAdmin);

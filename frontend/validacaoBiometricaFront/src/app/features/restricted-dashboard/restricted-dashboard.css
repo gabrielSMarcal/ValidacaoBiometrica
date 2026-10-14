@@ -1,0 +1,27 @@
+:host {
+  display: block;
+}
+
+.dashboard {
+  width: min(100% - 3rem, 52rem);
+  margin: 4rem auto;
+  padding: 3rem;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 1.25rem 3rem rgba(7, 25, 16, 0.1);
+}
+
+.eyebrow {
+  color: #0f5a3c;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dashboard h1 {
+  color: #0b1f17;
+}
+
+.welcome-message {
+  color: #31443a;
+  font-size: 1.25rem;
+}

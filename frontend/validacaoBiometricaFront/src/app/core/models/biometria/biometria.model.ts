@@ -1,9 +1,9 @@
-export interface BiometriaFrente {
+export interface Frame {
   largura: number;
   altura: number;
   rgb_base64: string;
 }
 
 export interface BiometriaRequest {
-  frente: BiometriaFrente[];
+  frames: Frame[];
 }

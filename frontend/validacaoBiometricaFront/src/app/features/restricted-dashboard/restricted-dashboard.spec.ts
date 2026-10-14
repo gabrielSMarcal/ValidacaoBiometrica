@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { RestrictedDashboard } from './restricted-dashboard';
 
 describe('RestrictedDashboard', () => {
@@ -8,6 +9,7 @@ describe('RestrictedDashboard', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [RestrictedDashboard],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RestrictedDashboard);
