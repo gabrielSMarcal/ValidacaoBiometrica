@@ -249,13 +249,13 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
             response.delete_cookie(name, path='/', secure=settings.cookie_secure,
                                    httponly=True, samesite='strict')
 
-    def autenticar(db, request, response, user, processamento, evento):
+    def autenticar(db, request, response, user, processamento, evento, motivo='reconhecido'):
     
         token = secrets.token_urlsafe(32)
         db.execute(delete(Sessao).where(Sessao.expira_em <= agora()))
         db.add(Sessao(token_hash=hash_token(token), usuario_id=user.id,
                       expira_em=agora() + timedelta(minutes=settings.session_minutes)))
-        log(db, request, evento, True, 'reconhecido', user.id)
+        log(db, request, evento, True, motivo, user.id)
         db.commit()
         response.set_cookie(COOKIE, token, max_age=settings.session_minutes * 60,
                             httponly=True, secure=settings.cookie_secure, samesite='strict', path='/')
@@ -358,6 +358,8 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         if not user:
             raise HTTPException(404, 'Usuário não encontrado.')
+        if user.nivel == 4:
+            raise HTTPException(403, 'O administrador é reservado à inicialização do sistema.')
         
         if dados.nome is not None:
             user.nome = dados.nome
@@ -388,6 +390,8 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         if not user:
             raise HTTPException(404, 'Usuário não encontrado.')
+        if user.nivel == 4:
+            raise HTTPException(403, 'O administrador não utiliza biometria.')
         
         sig, processamento = captura(db, request, dados, 'biometria_atualizada')
         user.assinatura_cifrada = seguranca.cifrar(sig, user.biometria_ref, 'biometria')
@@ -405,6 +409,8 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         if not user:
             raise HTTPException(404, 'Usuário não encontrado.')
+        if user.nivel == 4:
+            raise HTTPException(403, 'O administrador não pode ser excluído.')
         
         log(db, request, 'usuario_excluido', True, 'excluido', user.id)
         db.delete(user)
@@ -425,6 +431,10 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         if seguranca.senhas.check_needs_rehash(user.senha_hash):
             user.senha_hash = seguranca.senhas.hash(dados.senha)
+        if user.nivel == 4:
+            autenticar(db, request, response, user, None, 'credenciais', motivo='administrador')
+            return {'mensagem': 'CPF e senha confirmados. Sessão administrativa iniciada.',
+                    'expira_em_segundos': settings.session_minutes * 60}
         
         token = secrets.token_urlsafe(32)
         db.execute(delete(DesafioBiometrico).where(DesafioBiometrico.expira_em <= agora()))

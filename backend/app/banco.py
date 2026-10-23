@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, LargeBinary, String, create_engine
+from sqlalchemy import Boolean, CheckConstraint, Computed, DateTime, ForeignKey, Integer, LargeBinary, String, UniqueConstraint, create_engine
 from sqlalchemy.dialects.mysql import MEDIUMBLOB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, validates
 
@@ -19,8 +19,12 @@ class Base(DeclarativeBase):
 
 class Usuario(Base):
     __tablename__ = 'usuarios'
-    __table_args__ = (CheckConstraint('nivel BETWEEN 1 AND 3', name='ck_usuario_nivel'),
-                      {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'})
+    __table_args__ = (
+        CheckConstraint('nivel BETWEEN 1 AND 4', name='ck_usuario_nivel'),
+        CheckConstraint('nivel = 4 OR assinatura_cifrada IS NOT NULL', name='ck_usuario_assinatura'),
+        UniqueConstraint('admin_unico', name='uq_usuario_admin_unico'),
+        {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'},
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     biometria_ref: Mapped[str] = mapped_column(String(36), unique=True, default=lambda: str(uuid4()))
@@ -28,8 +32,10 @@ class Usuario(Base):
     cpf_indice: Mapped[str] = mapped_column(String(64), unique=True)
     cpf_cifrado: Mapped[bytes] = mapped_column(LargeBinary)
     senha_hash: Mapped[str] = mapped_column(String(255))
-    assinatura_cifrada: Mapped[bytes] = mapped_column(LargeBinary().with_variant(MEDIUMBLOB(), 'mysql'))
+    assinatura_cifrada: Mapped[bytes | None] = mapped_column(LargeBinary().with_variant(MEDIUMBLOB(), 'mysql'), nullable=True)
     nivel: Mapped[int] = mapped_column(Integer)
+    admin_unico: Mapped[int | None] = mapped_column(
+        Integer, Computed('CASE WHEN nivel = 4 THEN 1 ELSE NULL END', persisted=True))
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
