@@ -13,6 +13,21 @@ if not exist "%PYTHON%" (
 
 cd /d "%ROOT%"
 
+echo Instalando as dependencias do backend...
+"%PYTHON%" -m pip install -r "%ROOT%requirements.txt"
+if errorlevel 1 (
+    echo Falha ao instalar as dependencias. Confira a conexao e o ambiente virtual.
+    pause
+    exit /b 1
+)
+
+echo Preparando os modelos faciais...
+"%PYTHON%" scripts\preparar_modelos.py
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+
 echo Preparando o banco MySQL...
 "%PYTHON%" -m app.inicializar
 if errorlevel 1 (

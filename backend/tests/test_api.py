@@ -2,15 +2,19 @@
 import base64
 from datetime import timedelta
 import json
+import secrets
 from types import SimpleNamespace
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from httpx import Cookies
 import pytest
 from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.banco import Base, DesafioBiometrico, LogAcesso, Sessao, Usuario, agora
+from app.biometria import DIMENSAO
 from app.config import Settings
 from app.seguranca import Seguranca, hash_token
 from tests.test_biometria import quadro_sintetico
@@ -51,8 +55,46 @@ def outra_captura():
     return {'frames': [quadro_sintetico(tipo=1)] * 3}
 
 
+def gerenciar(api, metodo, rota, **kwargs):
+    """Executa CRUD com administrador e sessão reais, sem substituir dependências."""
+    token = secrets.token_urlsafe(32)
+    token_hash = hash_token(token)
+    cookies_antes = Cookies(api.client.cookies)
+    with Session(api.engine) as db:
+        administrador = db.scalar(select(Usuario).where(Usuario.nivel == 4))
+        temporario = administrador is None
+        if temporario:
+            referencia = str(uuid4())
+            cpf = '39053344705'
+            administrador = Usuario(
+                id=0, biometria_ref=referencia, nome='Administrador de teste',
+                cpf_indice=api.seguranca.indice_cpf(cpf),
+                cpf_cifrado=api.seguranca.cifrar({'cpf': cpf}, referencia, 'cpf'),
+                senha_hash=api.seguranca.hash_ficticio, assinatura_cifrada=None,
+                nivel=4, ativo=True,
+            )
+            db.add(administrador)
+            db.flush()
+        administrador_id = administrador.id
+        db.add(Sessao(token_hash=token_hash, usuario_id=administrador_id,
+                      expira_em=agora() + timedelta(minutes=5)))
+        db.commit()
+    try:
+        headers = {**kwargs.pop('headers', {}), 'Cookie': f'aps_sessao={token}'}
+        return api.client.request(metodo, rota, headers=headers, **kwargs)
+    finally:
+        api.client.cookies = cookies_antes
+        with Session(api.engine) as db:
+            sessao = db.get(Sessao, token_hash)
+            if sessao is not None:
+                db.delete(sessao)
+            if temporario:
+                db.delete(db.get(Usuario, administrador_id))
+            db.commit()
+
+
 def cadastrar(api, captura, cpf=CPF_TESTE, nivel=2):
-    return api.client.post('/api/usuarios', json={**captura, 'nome': 'Pessoa de Teste',
+    return gerenciar(api, 'POST', '/api/usuarios', json={**captura, 'nome': 'Pessoa de Teste',
                            'cpf': cpf, 'senha': SENHA_TESTE, 'nivel': nivel})
 
 
@@ -84,7 +126,7 @@ def test_cadastro_pipeline_cifra_banco_e_logs_sem_dados_crus(api, captura):
         user = db.scalar(select(Usuario))
         assert isinstance(user.assinatura_cifrada, bytes) and b'vetor' not in user.assinatura_cifrada
         sig = api.seguranca.decifrar(user.assinatura_cifrada, user.biometria_ref, 'biometria')
-        assert sig['dimensao'] == len(sig['vetor']) == 1280
+        assert sig['dimensao'] == len(sig['vetor']) == DIMENSAO == 512
         assert api.seguranca.decifrar(user.cpf_cifrado, user.biometria_ref, 'cpf') == {'cpf': CPF_TESTE}
         assert CPF_TESTE.encode() not in user.cpf_cifrado and CPF_TESTE not in user.cpf_indice
         assert api.seguranca.verificar_senha(SENHA_TESTE, user.senha_hash)
@@ -98,7 +140,7 @@ def test_cadastro_pipeline_cifra_banco_e_logs_sem_dados_crus(api, captura):
     assert not any(s in response.text for s in [CPF_TESTE, SENHA_TESTE, 'rgb_base64', '"vetor"'])
 
 
-def test_cadastro_publico_ids_sequenciais_e_cpf_duplicado_rejeitado(api, captura):
+def test_cadastro_autorizado_ids_sequenciais_e_cpf_duplicado_rejeitado(api, captura):
     assert cadastrar(api, captura).json()['usuario']['id'] == 1
     assert cadastrar(api, captura, cpf=OUTRO_CPF).json()['usuario']['id'] == 2
     response = cadastrar(api, captura, cpf='529.982.247-25')
@@ -244,13 +286,13 @@ def test_delete_sql_preserva_logs_e_remove_sessao_desafio_por_cascata(api, captu
 
 def test_corrupcao_de_assinatura_falha_fechada_e_registra_evento(api, captura):
     assert cadastrar(api, captura).status_code == 201
-    assert credenciais(api).status_code == 200
     with Session(api.engine) as db:
         user = db.get(Usuario, 1)
         blob = bytearray(user.assinatura_cifrada)
         blob[-1] ^= 1
         user.assinatura_cifrada = bytes(blob)
         db.commit()
+    assert credenciais(api).status_code == 200
     assert verificar(api, captura).status_code == 503
     assert contar(api, Sessao) == contar(api, DesafioBiometrico) == 0
     with Session(api.engine) as db:
@@ -261,7 +303,7 @@ def test_resposta_422_nao_retorna_senha_cpf_ou_pixels(api):
     senha, pixels = 'NAO_ECOAR_SENHA_PRIVADA', 'NAO_ECOAR_PIXELS_PRIVADOS'
     payload = {'nome': 'Pessoa de Teste', 'cpf': CPF_TESTE, 'senha': senha, 'nivel': 4,
                'frames': [{'largura': 320, 'altura': 240, 'rgb_base64': pixels}] * 3}
-    response = api.client.post('/api/usuarios', json=payload)
+    response = gerenciar(api, 'POST', '/api/usuarios', json=payload)
     assert response.status_code == 422
     assert not any(s in response.text for s in [senha, pixels, CPF_TESTE, '"input"'])
     assert contar(api, Usuario) == 0
@@ -311,25 +353,25 @@ def test_saude_confere_banco_e_deixa_limite_biometrico_explicito(api):
     response = api.client.get('/api/saude')
     assert response.status_code == 200
     assert response.json()['banco'] == 'ok' and response.json()['prova_de_vida'] is False
-    assert response.json()['framework'] == 'TensorFlow'
+    assert response.json()['framework'] == 'ONNX Runtime'
     assert response.headers['cache-control'] == 'no-store'
 
 
 def test_crud_de_usuarios_e_recadastro_biometrico(api, captura, outra_captura):
     assert cadastrar(api, captura).status_code == 201
-    lista = api.client.get('/api/usuarios')
+    lista = gerenciar(api, 'GET', '/api/usuarios')
     assert lista.status_code == 200
-    assert lista.json()['usuarios'][0]['nome'] == 'Pessoa de Teste'
-    atualizada = api.client.patch('/api/usuarios/1', json={
+    assert next(u for u in lista.json()['usuarios'] if u['id'] == 1)['nome'] == 'Pessoa de Teste'
+    atualizada = gerenciar(api, 'PATCH', '/api/usuarios/1', json={
         'nome': 'Pessoa Editada', 'nivel': 3, 'ativo': False,
     })
     assert atualizada.status_code == 200
     assert atualizada.json()['usuario']['nome'] == 'Pessoa Editada'
     assert atualizada.json()['usuario']['ativo'] is False
-    biometria = api.client.put('/api/usuarios/1/biometria', json=outra_captura)
+    biometria = gerenciar(api, 'PUT', '/api/usuarios/1/biometria', json=outra_captura)
     assert biometria.status_code == 200
-    assert biometria.json()['processamento']['modelo'].startswith('TensorFlow')
-    exclusao = api.client.delete('/api/usuarios/1')
+    assert 'AuraFace' in biometria.json()['processamento']['modelo']
+    exclusao = gerenciar(api, 'DELETE', '/api/usuarios/1')
     assert exclusao.status_code == 204 and exclusao.content == b''
-    assert api.client.get('/api/usuarios').json() == {'usuarios': []}
+    assert [u for u in gerenciar(api, 'GET', '/api/usuarios').json()['usuarios'] if u['nivel'] != 4] == []
 

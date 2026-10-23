@@ -14,7 +14,7 @@ from app.banco import DesafioBiometrico, Sessao, Usuario
 from app.config import Settings
 from app.seguranca import Seguranca, hash_token
 from tests.test_api import (
-    CHAVE_TESTE, CPF_TESTE, api, captura, cadastrar, contar, credenciais, verificar,
+    CHAVE_TESTE, CPF_TESTE, api, captura, cadastrar, contar, credenciais, gerenciar, verificar,
 )
 
 CPF_ADMIN_TESTE = '12345678909'
@@ -205,7 +205,7 @@ def test_login_admin_revoga_acesso_anterior(admin, captura, etapa):
 
 @pytest.mark.parametrize('alteracao', [{'nivel': 1}, {'ativo': False}, {'senha': 'Outra-senha-2026!'}, {'nome': 'Outro nome'}])
 def test_admin_protegido_de_alteracoes_pela_api(admin, alteracao):
-    assert admin.client.patch('/api/usuarios/1', json=alteracao).status_code == 403
+    assert gerenciar(admin, 'PATCH', '/api/usuarios/1', json=alteracao).status_code == 403
     with Session(admin.engine) as db:
         usuario = db.get(Usuario, 1)
         assert usuario.nivel == 4 and usuario.ativo and usuario.nome == 'Administrador'
@@ -213,8 +213,8 @@ def test_admin_protegido_de_alteracoes_pela_api(admin, alteracao):
 
 
 def test_admin_nao_pode_ser_excluido_ou_receber_biometria(admin, captura):
-    assert admin.client.delete('/api/usuarios/1').status_code == 403
-    assert admin.client.put('/api/usuarios/1/biometria', json=captura).status_code == 403
+    assert gerenciar(admin, 'DELETE', '/api/usuarios/1').status_code == 403
+    assert gerenciar(admin, 'PUT', '/api/usuarios/1/biometria', json=captura).status_code == 403
     with Session(admin.engine) as db:
         assert db.get(Usuario, 1).assinatura_cifrada is None
 
@@ -222,7 +222,7 @@ def test_admin_nao_pode_ser_excluido_ou_receber_biometria(admin, captura):
 def test_nivel_4_nao_pode_ser_concedido_pela_api_nem_duplicado_no_banco(admin, captura):
     assert cadastrar(admin, captura, nivel=4).status_code == 422
     usuario = cadastrar(admin, captura).json()['usuario']
-    assert admin.client.patch(f'/api/usuarios/{usuario["id"]}', json={'nivel': 4}).status_code == 422
+    assert gerenciar(admin, 'PATCH', f'/api/usuarios/{usuario["id"]}', json={'nivel': 4}).status_code == 422
     with Session(admin.engine) as db:
         db.get(Usuario, usuario['id']).nivel = 4
         with pytest.raises(IntegrityError):

@@ -41,7 +41,7 @@ def test_pipeline_gera_assinatura_json_e_resumo_das_cinco_fases():
     frame = quadro_sintetico()
     assinatura, resumo = processar_captura([frame] * 3)
     assert assinatura["algoritmo"] == ALGORITMO
-    assert assinatura["dimensao"] == DIMENSAO == 1280
+    assert assinatura["dimensao"] == DIMENSAO == 512
     assert len(assinatura["vetor"]) == DIMENSAO
     assert np.linalg.norm(assinatura["vetor"]) == pytest.approx(1, abs=1e-7)
     assert len(resumo["etapas"]) == 5
@@ -103,7 +103,7 @@ def test_distancia_simetrica_identidade_e_estabilidade_a_brilho():
     assert comparar_assinaturas(a, a) == pytest.approx(0)
     assert comparar_assinaturas(a, outra) == pytest.approx(comparar_assinaturas(outra, a))
     assert comparar_assinaturas(a, b) < 0.08
-    assert 0.20 < comparar_assinaturas(a, outra) <= 1
+    assert 0.40 < comparar_assinaturas(a, outra) <= 2
 
 
 def test_captura_rejeita_texturas_inconsistentes():
@@ -148,7 +148,7 @@ def test_classificacao_rejeita_limiares_invalidos(valor):
 
 
 @pytest.mark.parametrize("alteracao", [
-    {"versao": 3}, {"algoritmo": "outro"}, {"dimensao": 1}, {"vetor": []},
+    {"versao": 2}, {"algoritmo": "outro"}, {"dimensao": 1}, {"vetor": []},
     {"vetor": [float("nan")] * DIMENSAO}, {"vetor": [0] * DIMENSAO},
     {"vetor": ["0.001"] * DIMENSAO}, {"vetor": [-1] * DIMENSAO},
 ])

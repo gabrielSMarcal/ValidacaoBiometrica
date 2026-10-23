@@ -1,6 +1,7 @@
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import timedelta
+import hashlib
 import secrets
 from threading import Lock
 from time import monotonic
@@ -16,7 +17,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .banco import DesafioBiometrico, LogAcesso, Sessao, Usuario, agora, criar_engine, fabrica_sessoes
-from .biometria import ALGORITMO, BiometriaErro, classificacao_interpretacao, processar_captura
+from .biometria import ALGORITMO, BiometriaErro, BiometriaIndisponivel, classificacao_interpretacao, processar_captura
 from .config import Settings
 from .esquemas import Cadastro, Captura, Credenciais, UsuarioAtualizacao
 from .seguranca import Seguranca, hash_token
@@ -205,11 +206,26 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
     
         raise HTTPException(status, mensagem)
 
+    def administrador(request: Request, db=Depends(banco)):
+        token = request.cookies.get(COOKIE)
+        sessao = db.get(Sessao, hash_token(token)) if token else None
+        user = db.get(Usuario, sessao.usuario_id) if sessao and sessao.expira_em > agora() else None
+
+        if not user or not user.ativo:
+            negar(db, request, 'administracao', 'sessao_invalida', 401,
+                  'Sessão ausente ou expirada. Entre novamente.')
+        if user.nivel != 4:
+            negar(db, request, 'administracao', 'nivel_insuficiente', 403,
+                  'Acesso reservado ao administrador.', user.id)
+        return user
+
     def captura(db, request, dados, evento):
     
         try:
             return processar_captura([frame.model_dump() for frame in dados.frames])
     
+        except BiometriaIndisponivel as exc:
+            negar(db, request, evento, 'modelo_indisponivel', 503, str(exc))
         except BiometriaErro as exc:
             negar(db, request, evento, 'captura_invalida', 422, str(exc))
 
@@ -224,6 +240,11 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
 
     def publico(user):
         return {'id': user.id, 'nome': user.nome, 'nivel': user.nivel}
+
+    def fingerprint_autorizacao(user):
+        digest = hashlib.sha256(user.senha_hash.encode('utf-8') + b'\x00')
+        digest.update(user.assinatura_cifrada or b'')
+        return digest.hexdigest()
 
     def publico_administrativo(user):
         return {**publico(user), 'ativo': user.ativo,
@@ -314,9 +335,9 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         db.execute(text('SELECT 1'))
         
         return {'status': 'ok', 'banco': 'ok', 'algoritmo': ALGORITMO,
-                'framework': 'TensorFlow', 'prova_de_vida': False}
+                'framework': 'ONNX Runtime', 'prova_de_vida': False}
 
-    @app.post('/api/usuarios', status_code=201, tags=['Cadastro'])
+    @app.post('/api/usuarios', status_code=201, tags=['Cadastro'], dependencies=[Depends(administrador)])
     def cadastrar(dados: Cadastro, request: Request, db=Depends(banco)):
         
         cpf_indice = seguranca.indice_cpf(dados.cpf)
@@ -343,14 +364,14 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         return {'usuario': publico(user), 'processamento': processamento}
 
-    @app.get('/api/usuarios', tags=['Usuários'])
+    @app.get('/api/usuarios', tags=['Usuários'], dependencies=[Depends(administrador)])
     def listar_usuarios(db=Depends(banco)):
         
         usuarios = db.scalars(select(Usuario).order_by(Usuario.id)).all()
         
         return {'usuarios': [publico_administrativo(user) for user in usuarios]}
 
-    @app.patch('/api/usuarios/{usuario_id}', tags=['Usuários'])
+    @app.patch('/api/usuarios/{usuario_id}', tags=['Usuários'], dependencies=[Depends(administrador)])
     def atualizar_usuario(usuario_id: int, dados: UsuarioAtualizacao,
                           request: Request, db=Depends(banco)):
         
@@ -382,7 +403,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         return {'usuario': publico_administrativo(user)}
 
-    @app.put('/api/usuarios/{usuario_id}/biometria', tags=['Usuários'])
+    @app.put('/api/usuarios/{usuario_id}/biometria', tags=['Usuários'], dependencies=[Depends(administrador)])
     def atualizar_biometria(usuario_id: int, dados: Captura,
                             request: Request, db=Depends(banco)):
         
@@ -402,7 +423,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         return {'usuario': publico_administrativo(user), 'processamento': processamento}
 
-    @app.delete('/api/usuarios/{usuario_id}', status_code=204, tags=['Usuários'])
+    @app.delete('/api/usuarios/{usuario_id}', status_code=204, tags=['Usuários'], dependencies=[Depends(administrador)])
     def excluir_usuario(usuario_id: int, request: Request, db=Depends(banco)):
         
         user = db.get(Usuario, usuario_id)
@@ -440,7 +461,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         db.execute(delete(DesafioBiometrico).where(DesafioBiometrico.expira_em <= agora()))
         db.add(DesafioBiometrico(token_hash=hash_token(token), usuario_id=user.id,
                                 expira_em=agora() + timedelta(seconds=DESAFIO_SEGUNDOS),
-                                senha_fingerprint=hash_token(user.senha_hash)))
+                                senha_fingerprint=fingerprint_autorizacao(user)))
         log(db, request, 'credenciais', True, 'aguardando_biometria', user.id)
         db.commit()
         response.delete_cookie(COOKIE, path='/', secure=settings.cookie_secure, httponly=True, samesite='strict')
@@ -471,7 +492,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         user = db.get(Usuario, user_id)
         
-        if not user or not user.ativo or hash_token(user.senha_hash) != fingerprint:
+        if not user or not user.ativo or fingerprint_autorizacao(user) != fingerprint:
             negar(db, request, 'verificacao', 'desafio_invalidado', mensagem='A autorização mudou. Informe CPF e senha novamente.')
         sig, processamento = captura(db, request, dados, 'verificacao')
         
@@ -489,7 +510,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         processamento['classificacao_interpretacao'] = resultado
         db.refresh(user, with_for_update=True)
         
-        if not user.ativo or hash_token(user.senha_hash) != fingerprint:
+        if not user.ativo or fingerprint_autorizacao(user) != fingerprint:
             negar(db, request, 'verificacao', 'desafio_invalidado', mensagem='A autorização mudou. Informe CPF e senha novamente.')
         
         return autenticar(db, request, response, user, processamento, 'verificacao')

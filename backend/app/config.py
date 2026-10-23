@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     biometric_key: SecretStr = Field(default_factory=chave_local, validate_default=True)
     allowed_origins: str = ('http://127.0.0.1:5500,http://localhost:5500,'
                             'http://127.0.0.1:8080,http://localhost:8080')
-    face_threshold: float = Field(default=0.20, gt=0, le=1)
+    face_threshold: float = Field(default=0.30, gt=0, le=0.40)
     face_margin: float = Field(default=0.03, gt=0, le=1)
     session_minutes: int = Field(default=15, ge=1, le=120)
     cookie_secure: bool = False

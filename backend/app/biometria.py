@@ -1,39 +1,40 @@
-"""Pipeline facial: quadros RGB vivos, recorte guiado e embedding TensorFlow.
-
-Toda a lógica de imagem permanece neste módulo. A MobileNetV2 pré-treinada no
-ImageNet funciona como extrator visual experimental; ela não é prova de vida
-nem um modelo facial certificado. Fotos e telas ainda podem enganar o fluxo.
-"""
+"""Detecção YuNet, alinhamento facial e reconhecimento AuraFace de 512 dimensões."""
 
 from __future__ import annotations
 
 import base64
 import binascii
 import math
-from threading import Lock
 from typing import Any
 
 import numpy as np
-import tensorflow as tf
+
+from .modelos_faciais import ModeloFacialIndisponivel, detectar_faces, inferir_embedding
 
 
 GUIA = {"x": 0.25, "y": 0.10, "largura": 0.50, "altura": 0.80}
-LIMIAR_EXPERIMENTAL = 0.20
+LIMIAR_EXPERIMENTAL = 0.30
+LIMIAR_MAXIMO = 0.40
 MARGEM_EXPERIMENTAL = 0.03
-LIMITE_CONSISTENCIA = 0.24
+LIMITE_CONSISTENCIA = 0.25
 FOCO_MINIMO_EXPERIMENTAL = 1.5
-ALGORITMO = "tensorflow-mobilenetv2-imagenet-face-roi-v2"
-VERSAO = 2
-DIMENSAO = 1280
-_TAMANHO_MODELO = 160
-_LARGURA_CANONICA = 160
-_ALTURA_CANONICA = 192
-_MODELO = None
-_MODELO_LOCK = Lock()
+ALGORITMO = "auraface-v1-arcface-r100-yunet-112-v3"
+VERSAO = 3
+DIMENSAO = 512
+_LARGURA_CANONICA = 112
+_ALTURA_CANONICA = 112
+_PONTOS_ALINHAMENTO = np.array([
+    [38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
+    [41.5493, 92.3655], [70.7299, 92.2041],
+], dtype=np.float64)
 
 
 class BiometriaErro(ValueError):
     """Captura, modelo ou assinatura incompatível com o pipeline."""
+
+
+class BiometriaIndisponivel(BiometriaErro):
+    pass
 
 
 def sensoriamento(frame: dict[str, Any]) -> np.ndarray:
@@ -88,7 +89,7 @@ def pre_processamento(rgb: np.ndarray) -> dict[str, np.ndarray]:
     suavizada = (bordas[:-2] + 2 * bordas[1:-1] + bordas[2:]) / 4
     cinza = suavizada @ np.array([0.299, 0.587, 0.114], np.float32)
     
-    return {"rgb": suavizada, "cinza": cinza}
+    return {"rgb": imagem, "cinza": cinza}
 
 
 def _mascara_eliptica(altura: int, largura: int) -> np.ndarray:
@@ -118,9 +119,38 @@ def _redimensionar(imagem: np.ndarray, altura: int, largura: int) -> np.ndarray:
     return (acima * (1 - fy) + abaixo * fy).astype(np.float32)
 
 
+def _detectar_faces(rgb: np.ndarray) -> np.ndarray:
+    try:
+        return detectar_faces(rgb)
+    except ModeloFacialIndisponivel as exc:
+        raise BiometriaIndisponivel(str(exc)) from None
+
+
+def _alinhar_rosto(rgb: np.ndarray, pontos: np.ndarray) -> np.ndarray:
+    origem = pontos - pontos.mean(axis=0)
+    destino = _PONTOS_ALINHAMENTO - _PONTOS_ALINHAMENTO.mean(axis=0)
+    variancia = float(np.sum(origem ** 2) / len(pontos))
+    if variancia <= 1e-12:
+        raise BiometriaErro("Pontos faciais inválidos para o alinhamento.")
+    u, valores, vt = np.linalg.svd(destino.T @ origem / len(pontos))
+    if valores[0] <= 1e-12 or valores[1] / valores[0] < 0.05:
+        raise BiometriaErro("Pontos faciais inválidos para o alinhamento.")
+    sinais = np.array([1.0, np.sign(np.linalg.det(u @ vt))])
+    rotacao = u @ np.diag(sinais) @ vt
+    escala = float(np.dot(valores, sinais) / variancia)
+    translacao = _PONTOS_ALINHAMENTO.mean(axis=0) - escala * rotacao @ pontos.mean(axis=0)
+    matriz = np.column_stack((escala * rotacao, translacao))
+    try:
+        import cv2
+        return cv2.warpAffine(rgb, matriz, (112, 112), flags=cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    except Exception as exc:
+        raise BiometriaIndisponivel("Não foi possível alinhar o rosto no servidor.") from exc
+
+
 def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any]:
     """
-    3. Segmentação: controla qualidade e recorta a região facial da guia.
+    3. Segmentação: exige um único rosto detectado e alinha cinco pontos faciais.
     """
     
     if isinstance(processado, np.ndarray):
@@ -137,13 +167,32 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any
             or not isinstance(rgb, np.ndarray) or rgb.shape != (*cinza.shape, 3)):
         raise BiometriaErro("A segmentação requer uma imagem RGB pré-processada.")
     
-    if not np.isfinite(cinza).all() or np.any(cinza < 0) or np.any(cinza > 255.001):
+    if (not np.isfinite(cinza).all() or not np.isfinite(rgb).all()
+            or np.any(cinza < 0) or np.any(cinza > 255.001)
+            or np.any(rgb < 0) or np.any(rgb > 255)):
         raise BiometriaErro("A imagem contém valores inválidos.")
 
     altura, largura = cinza.shape
-    x0, y0 = round(largura * GUIA["x"]), round(altura * GUIA["y"])
-    x1 = round(largura * (GUIA["x"] + GUIA["largura"]))
-    y1 = round(altura * (GUIA["y"] + GUIA["altura"]))
+    faces = np.asarray(_detectar_faces(rgb))
+    if faces.ndim != 2 or faces.shape[1] != 15 or not np.isfinite(faces).all():
+        raise BiometriaErro("O detector retornou dados faciais inválidos.")
+    if len(faces) == 0:
+        raise BiometriaErro("Nenhum rosto detectado. Enquadre o rosto e ajuste a iluminação.")
+    if len(faces) != 1:
+        raise BiometriaErro("Capture apenas um rosto por vez.")
+    x, y, face_largura, face_altura = faces[0, :4]
+    if (faces[0, 14] < 0.90 or min(face_largura, face_altura) < 64
+            or face_largura * face_altura < largura * altura * 0.02
+            or x < -2 or y < -2 or x + face_largura > largura + 2 or y + face_altura > altura + 2):
+        raise BiometriaErro("Aproxime e enquadre o rosto inteiro na câmera.")
+    pontos = faces[0, 4:14].reshape(5, 2).astype(np.float64)
+    if (np.any(pontos < [0, 0]) or np.any(pontos >= [largura, altura])
+            or np.linalg.norm(pontos[1] - pontos[0]) < 16
+            or pontos[1, 0] <= pontos[0, 0]
+            or pontos[:2, 1].mean() >= pontos[3:, 1].mean()):
+        raise BiometriaErro("Os pontos faciais não permitem validar o rosto.")
+    x0, y0 = max(0, int(x)), max(0, int(y))
+    x1, y1 = min(largura, int(np.ceil(x + face_largura))), min(altura, int(np.ceil(y + face_altura)))
     regiao_cinza, regiao_rgb = cinza[y0:y1, x0:x1], rgb[y0:y1, x0:x1]
     mascara_original = _mascara_eliptica(*regiao_cinza.shape)
     valores = regiao_cinza[mascara_original]
@@ -168,9 +217,8 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any
     if foco < FOCO_MINIMO_EXPERIMENTAL:
         raise BiometriaErro("A imagem está pouco nítida. Limpe a lente e permaneça imóvel.")
 
-    imagem = _redimensionar(regiao_rgb, _ALTURA_CANONICA, _LARGURA_CANONICA)
-    mascara = _mascara_eliptica(_ALTURA_CANONICA, _LARGURA_CANONICA)
-    imagem[~mascara] = float(media)
+    imagem = _alinhar_rosto(rgb.astype(np.float32), pontos)
+    mascara = np.ones((_ALTURA_CANONICA, _LARGURA_CANONICA), dtype=np.bool_)
     
     return {
         "imagem": np.clip(imagem, 0, 255).astype(np.float32),
@@ -184,59 +232,16 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any
     }
 
 
-def _carregar_modelo():
-    """
-    Carrega uma única instância; os pesos ficam no cache padrão do Keras.
-    """
-    
-    global _MODELO
-    
-    if _MODELO is not None:
-        return _MODELO
-    
-    with _MODELO_LOCK:
-    
-        if _MODELO is not None:
-            return _MODELO
-    
-        try:
-            modelo = tf.keras.applications.MobileNetV2(
-                input_shape=(_TAMANHO_MODELO, _TAMANHO_MODELO, 3),
-                include_top=False, weights="imagenet", pooling="avg",
-            )
-    
-        except Exception as exc:
-            raise BiometriaErro(
-                "Não foi possível carregar os pesos TensorFlow. Conecte-se à internet na primeira execução."
-            ) from exc
-    
-        modelo.trainable = False
-        _MODELO = modelo
-    
-    return _MODELO
-
-
 def _inferir_embedding(imagem: np.ndarray) -> np.ndarray:
-    """
-    Executa inferência TensorFlow e devolve um embedding L2-normalizado.
-    """
-    
-    modelo = _carregar_modelo()
-    tensor = tf.convert_to_tensor(imagem[None, ...], dtype=tf.float32)
-    tensor = tf.image.resize(tensor, (_TAMANHO_MODELO, _TAMANHO_MODELO), antialias=True)
-    tensor = tf.keras.applications.mobilenet_v2.preprocess_input(tensor)
-    vetor = np.asarray(modelo(tensor, training=False).numpy()[0], dtype=np.float64)
-    norma = float(np.linalg.norm(vetor))
-    
-    if vetor.shape != (DIMENSAO,) or not np.isfinite(vetor).all() or norma <= 1e-12:
-        raise BiometriaErro("O modelo TensorFlow produziu um embedding inválido.")
-    
-    return vetor / norma
+    try:
+        return inferir_embedding(imagem)
+    except ModeloFacialIndisponivel as exc:
+        raise BiometriaIndisponivel(str(exc)) from None
 
 
 def extracao_caracteristicas(segmento: dict[str, Any]) -> dict[str, Any]:
     """
-    4. Extração: transforma a região facial em embedding TensorFlow.
+    4. Extração: transforma o rosto alinhado em embedding facial AuraFace.
     """
     
     if not isinstance(segmento, dict):
@@ -246,7 +251,7 @@ def extracao_caracteristicas(segmento: dict[str, Any]) -> dict[str, Any]:
     esperado = (_ALTURA_CANONICA, _LARGURA_CANONICA, 3)
     
     if not isinstance(imagem, np.ndarray) or imagem.shape != esperado:
-        raise BiometriaErro("Dimensões incompatíveis com o modelo TensorFlow.")
+        raise BiometriaErro("Dimensões incompatíveis com o modelo facial.")
     
     if not isinstance(mascara, np.ndarray) or mascara.shape != esperado[:2] or mascara.dtype != np.bool_:
         raise BiometriaErro("Máscara incompatível com a região facial.")
@@ -262,7 +267,8 @@ def _criar_assinatura(vetor: np.ndarray) -> dict[str, Any]:
     vetor = np.asarray(vetor, dtype=np.float64)
     norma = float(np.linalg.norm(vetor))
     
-    if vetor.shape != (DIMENSAO,) or not np.isfinite(vetor).all() or norma <= 1e-12:
+    if (vetor.shape != (DIMENSAO,) or not np.isfinite(vetor).all()
+            or not math.isfinite(norma) or norma <= 1e-12):
         raise BiometriaErro("Não foi possível normalizar o embedding biométrico.")
     
     vetor = vetor / norma
@@ -305,12 +311,12 @@ def _validar_assinatura(assinatura: dict[str, Any]) -> np.ndarray:
 
 def comparar_assinaturas(a: dict[str, Any], b: dict[str, Any]) -> float:
     """
-    Distância de cosseno em [0, 1]; zero indica embeddings iguais.
+    Distância de cosseno em [0, 2]; zero indica embeddings iguais.
     """
     
     va, vb = _validar_assinatura(a), _validar_assinatura(b)
     
-    return (1 - float(np.clip(np.dot(va, vb), -1, 1))) / 2
+    return 1 - float(np.clip(np.dot(va, vb), -1, 1))
 
 
 def classificacao_interpretacao(
@@ -323,9 +329,9 @@ def classificacao_interpretacao(
     
     _validar_assinatura(assinatura)
     
-    for valor in (limiar, margem):
-        if type(valor) not in (int, float) or not 0 <= valor <= 1 or not math.isfinite(valor):
-            raise BiometriaErro("Limiar e margem devem estar entre zero e um.")
+    for valor, maximo in ((limiar, LIMIAR_MAXIMO), (margem, 1)):
+        if type(valor) not in (int, float) or not 0 <= valor <= maximo or not math.isfinite(valor):
+            raise BiometriaErro("Limiar ou margem fora do intervalo permitido pelo modelo facial.")
     
     if not isinstance(candidatos, list):
         raise BiometriaErro("Os candidatos devem ser uma lista de identificadores e assinaturas.")
@@ -343,7 +349,14 @@ def classificacao_interpretacao(
             raise BiometriaErro("Cada candidato deve possuir um identificador único.")
     
         ids.add(usuario_id)
-        resultados.append((comparar_assinaturas(assinatura, cadastrada), usuario_id))
+        distancia = comparar_assinaturas(assinatura, cadastrada)
+        amostras = assinatura.get("amostras", [])
+        if not isinstance(amostras, list) or (amostras and not 3 <= len(amostras) <= 5):
+            raise BiometriaErro("Amostras da assinatura biométrica inválidas.")
+        for vetor in amostras:
+            amostra = {"versao": VERSAO, "algoritmo": ALGORITMO, "dimensao": DIMENSAO, "vetor": vetor}
+            distancia = max(distancia, comparar_assinaturas(amostra, cadastrada))
+        resultados.append((distancia, usuario_id))
     
     resultados.sort()
     resultado = {"identificado": False, "usuario_id": None, "distancia": None,
@@ -389,7 +402,7 @@ def processar_captura(frames: list[dict[str, Any]]) -> tuple[dict[str, Any], dic
             assinaturas.append(extracao_caracteristicas(segmento))
             qualidades.append(segmento["qualidade"])
         except BiometriaErro as exc:
-            raise BiometriaErro(f"Quadro {indice}: {exc}") from exc
+            raise type(exc)(f"Quadro {indice}: {exc}") from exc
     
     maior_distancia = max(
         comparar_assinaturas(a, b)
@@ -400,17 +413,18 @@ def processar_captura(frames: list[dict[str, Any]]) -> tuple[dict[str, Any], dic
         raise BiometriaErro("Os quadros diferem muito. Mantenha o rosto no guia durante a captura.")
     
     assinatura = _criar_assinatura(np.mean([item["vetor"] for item in assinaturas], axis=0))
+    assinatura["amostras"] = [item["vetor"] for item in assinaturas]
     resumo = {
         "etapas": [
             {"fase": "Sensores", "descricao": f"{len(frames)} quadros RGB recebidos da câmera.",
              "largura": formato[1], "altura": formato[0], "canais": formato[2]},
             {"fase": "Pré-processamento", "descricao": "Suavização binomial e análise de luminância."},
-            {"fase": "Segmentação", "descricao": "Região facial elíptica guiada, normalizada em 160×192."},
-            {"fase": "Extração de características", "descricao": f"Embedding TensorFlow MobileNetV2 com {DIMENSAO} componentes."},
-            {"fase": "Classificação/interpretação", "descricao": "Comparação por distância de cosseno normalizada."},
+            {"fase": "Segmentação", "descricao": "Detecção de um rosto com YuNet e alinhamento em 112×112."},
+            {"fase": "Extração de características", "descricao": f"Embedding facial AuraFace com {DIMENSAO} componentes."},
+            {"fase": "Classificação/interpretação", "descricao": "Comparação facial 1:1 por distância de cosseno."},
         ],
         "quadros": len(frames), "qualidade": qualidades,
-        "modelo": "TensorFlow MobileNetV2 / pesos ImageNet", "algoritmo": ALGORITMO,
+        "modelo": "AuraFace v1 / ArcFace ResNet100 / ONNX Runtime", "algoritmo": ALGORITMO,
         "maior_distancia_entre_quadros": round(maior_distancia, 6),
         "limite_consistencia_experimental": LIMITE_CONSISTENCIA,
         "foco_minimo_experimental": FOCO_MINIMO_EXPERIMENTAL, "guia": GUIA.copy(),
