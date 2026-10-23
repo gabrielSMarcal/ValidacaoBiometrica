@@ -7,19 +7,12 @@ from .banco import Base, criar_engine
 from .config import Settings
 
 
-<<<<<<< HEAD
-def main():
-    
-    engine = criar_engine(Settings())
-    
-=======
 def codigo_mysql(exc):
     return getattr(getattr(exc, 'orig', None), 'args', (None,))[0]
 
 
 def preparar_banco(settings):
     engine = criar_engine(settings)
->>>>>>> 2e146cbcc14270a7ec9a8b5da932827f9ad7ff12
     try:
         try:
             with engine.connect():
@@ -38,16 +31,6 @@ def preparar_banco(settings):
             finally:
                 servidor.dispose()
         Base.metadata.create_all(engine)
-<<<<<<< HEAD
-    
-    except SQLAlchemyError:
-        raise SystemExit('Não foi possível criar as tabelas. Confira MySQL ativo, banco, usuário e senha no .env.') from None
-    
-    finally:
-        engine.dispose()
-    
-    print('Tabelas prontas: usuarios, logs_acesso, sessoes e desafios_biometricos. Dados existentes preservados.')
-=======
     finally:
         engine.dispose()
 
@@ -73,9 +56,7 @@ def main():
         raise SystemExit(motivo + ' Use variáveis de ambiente ou um .env opcional '
                          '(python scripts/configurar.py).') from None
     print('Banco MySQL e tabelas prontos. Dados existentes preservados.')
->>>>>>> 2e146cbcc14270a7ec9a8b5da932827f9ad7ff12
 
 
 if __name__ == '__main__':
-    
     main()

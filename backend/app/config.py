@@ -50,12 +50,8 @@ class Settings(BaseSettings):
                 raise ValueError
     
         except (ValueError, TypeError) as exc:
-<<<<<<< HEAD
-            raise ValueError('BIOMETRIC_KEY deve conter 32 bytes em base64. Execute scripts/configurar.py.') from exc
-=======
             raise ValueError('BIOMETRIC_KEY deve conter 32 bytes em base64. Confira a chave original '
                              'no ambiente, .env ou .runtime/biometric.key.') from exc
->>>>>>> 2e146cbcc14270a7ec9a8b5da932827f9ad7ff12
     
         return value
 

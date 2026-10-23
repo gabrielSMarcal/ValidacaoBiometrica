@@ -13,8 +13,6 @@ if not exist "%PYTHON%" (
 
 cd /d "%ROOT%"
 
-<<<<<<< HEAD
-=======
 echo Preparando o banco MySQL...
 "%PYTHON%" -m app.inicializar
 if errorlevel 1 (
@@ -22,7 +20,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
->>>>>>> 2e146cbcc14270a7ec9a8b5da932827f9ad7ff12
 echo Iniciando a API local...
 start "APS API" /b "%PYTHON%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
