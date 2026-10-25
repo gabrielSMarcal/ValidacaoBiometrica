@@ -25,6 +25,17 @@ export const routes: Routes = [
     loadComponent: () => import('./features/painel-admin/painel-admin').then((m) => m.PainelAdmin)
   },
   {
+    path: 'cadastro-usuario',
+    loadComponent: () =>
+      import('./features/cadastro-usuario/cadastro-usuario').then((m) => m.CadastroUsuario)
+  },
+  {
+    path: 'gerenciamento-usuarios',
+    loadComponent: () =>
+      import('./features/gerenciamento-usuarios/gerenciamento-usuarios')
+        .then((m) => m.GerenciamentoUsuarios)
+  },
+  {
     path: '**',
     redirectTo: ''
   }

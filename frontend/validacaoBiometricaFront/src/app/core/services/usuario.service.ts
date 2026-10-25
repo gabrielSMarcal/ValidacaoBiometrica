@@ -26,22 +26,30 @@ export class UsuarioService {
 
   cadastrarUsuario(dados: UsuarioCadastro): Observable<UsuarioComProcessamentoResponse> {
     return this.request(
-      this.http.post<UsuarioComProcessamentoResponse>(`${this.apiUrl}/usuarios`, dados)
+      this.http.post<UsuarioComProcessamentoResponse>(
+        `${this.apiUrl}/usuarios`, dados, this.withCredentials
+      )
     );
   }
 
   listarUsuarios(): Observable<UsuariosResponse> {
-    return this.request(this.http.get<UsuariosResponse>(`${this.apiUrl}/usuarios`));
+    return this.request(
+      this.http.get<UsuariosResponse>(`${this.apiUrl}/usuarios`, this.withCredentials)
+    );
   }
 
   atualizarUsuario(id: number, dados: UsuarioAtualizacao): Observable<UsuarioResponse> {
     return this.request(
-      this.http.patch<UsuarioResponse>(`${this.apiUrl}/usuarios/${id}`, dados)
+      this.http.patch<UsuarioResponse>(
+        `${this.apiUrl}/usuarios/${id}`, dados, this.withCredentials
+      )
     );
   }
 
   excluirUsuario(id: number): Observable<void> {
-    return this.request(this.http.delete<void>(`${this.apiUrl}/usuarios/${id}`));
+    return this.request(
+      this.http.delete<void>(`${this.apiUrl}/usuarios/${id}`, this.withCredentials)
+    );
   }
 
   atualizarBiometria(
@@ -51,7 +59,8 @@ export class UsuarioService {
     return this.request(
       this.http.put<UsuarioComProcessamentoResponse>(
         `${this.apiUrl}/usuarios/${id}/biometria`,
-        dados
+        dados,
+        this.withCredentials
       )
     );
   }

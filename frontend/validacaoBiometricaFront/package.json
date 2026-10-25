@@ -17,6 +17,7 @@
     "@angular/forms": "^22.0.0",
     "@angular/platform-browser": "^22.0.0",
     "@angular/router": "^22.0.0",
+    "@mediapipe/tasks-vision": "^1.1.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.16.0"
@@ -30,6 +31,4 @@
     "typescript": "~6.0.2",
     "vitest": "^4.0.8"
   }
-
-  
 }

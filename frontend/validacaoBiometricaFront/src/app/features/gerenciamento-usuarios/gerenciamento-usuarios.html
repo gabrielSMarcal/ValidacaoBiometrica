@@ -1,0 +1,53 @@
+<main class="user-page" aria-labelledby="user-management-title">
+  <p class="eyebrow">Administração</p>
+  <h1 id="user-management-title">Gerenciamento de usuários</h1>
+  <p>Consulte e administre os usuários cadastrados.</p>
+  @if (errorMessage()) {
+    <p class="error" role="alert">{{ errorMessage() }}</p>
+  }
+  @if (loading()) {
+    <p role="status">Carregando usuários…</p>
+  } @else if (users().length === 0) {
+    <p>Nenhum usuário cadastrado.</p>
+  } @else {
+    <div class="table-wrap">
+      <table>
+        <caption>Usuários cadastrados</caption>
+        <thead>
+          <tr><th scope="col">Nome</th><th scope="col">Nível</th><th scope="col">Status</th><th scope="col">Ações</th></tr>
+        </thead>
+        <tbody>
+          @for (user of users(); track user.id) {
+            <tr>
+              @if (editingId() === user.id) {
+                <td>
+                  <label class="sr-only" [for]="'name-' + user.id">Nome</label>
+                  <input [id]="'name-' + user.id" [value]="editing().nome" (input)="updateEditing('nome', $any($event.target).value)">
+                  <label class="sr-only" [for]="'password-' + user.id">Nova senha</label>
+                  <input [id]="'password-' + user.id" type="password" placeholder="Nova senha (opcional)" [value]="editing().senha" (input)="updateEditing('senha', $any($event.target).value)">
+                </td>
+                <td><select [value]="editing().nivel" (change)="updateEditing('nivel', $any($event.target).value)">
+                  <option [value]="1">1</option><option [value]="2">2</option><option [value]="3">3</option><option [value]="4">4 (admin)</option>
+                </select></td>
+              } @else {
+                <td>{{ user.nome }}</td><td>{{ user.nivel === 4 ? '4 (admin)' : user.nivel }}</td>
+              }
+              <td>{{ user.ativo ? 'Ativo' : 'Inativo' }}</td>
+              <td class="actions">
+                @if (editingId() === user.id) {
+                  <button type="button" [disabled]="savingId() === user.id" (click)="saveEditing(user)">Salvar</button>
+                  <button type="button" (click)="cancelEditing()">Cancelar</button>
+                } @else {
+                  <button type="button" (click)="startEditing(user)">Editar</button>
+                  <button type="button" [disabled]="savingId() === user.id" (click)="toggleActive(user)">{{ user.ativo ? 'Desativar' : 'Ativar' }}</button>
+                  <button type="button" class="danger" [disabled]="savingId() === user.id" (click)="remove(user)">Excluir</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+  <a routerLink="/painel-admin">Voltar ao painel</a>
+</main>

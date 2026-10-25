@@ -34,9 +34,10 @@ def atualizar_esquema(engine):
                               '(CASE WHEN nivel = 4 THEN 1 ELSE NULL END) STORED')
         if 'uq_usuario_admin_unico' not in unicos:
             alteracoes.append('ADD CONSTRAINT uq_usuario_admin_unico UNIQUE (admin_unico)')
-        if 'ck_usuario_assinatura' not in checks:
-            alteracoes.append('ADD CONSTRAINT ck_usuario_assinatura '
-                              'CHECK (nivel = 4 OR assinatura_cifrada IS NOT NULL)')
+        assinatura = checks.get('ck_usuario_assinatura')
+        if assinatura:
+            comando = 'DROP CONSTRAINT' if engine.dialect.is_mariadb else 'DROP CHECK'
+            alteracoes.append(f'{comando} ck_usuario_assinatura')
         if alteracoes:
             connection.exec_driver_sql('ALTER TABLE usuarios ' + ', '.join(alteracoes))
 

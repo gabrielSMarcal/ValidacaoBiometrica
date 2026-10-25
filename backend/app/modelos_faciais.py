@@ -5,11 +5,13 @@ from dataclasses import dataclass
 import hashlib
 import os
 from pathlib import Path
+import ssl
 import tempfile
 from threading import Lock
 from urllib.request import Request, urlopen
 
 import numpy as np
+import certifi
 
 from .config import ROOT
 
@@ -48,6 +50,7 @@ _CARGA_LOCK = Lock()
 _DETECCAO_LOCK = Lock()
 _detector = None
 _sessao = None
+_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 def _arquivo_valido(modelo: _Modelo) -> bool:
@@ -85,7 +88,7 @@ def _baixar_modelo(modelo: _Modelo) -> None:
             dir=DIRETORIO_MODELOS, delete=False,
         ) as destino:
             parcial = Path(destino.name)
-            with urlopen(requisicao, timeout=60) as resposta:
+            with urlopen(requisicao, timeout=300, context=_SSL_CONTEXT) as resposta:
                 while True:
                     bloco = resposta.read(min(1024 * 1024, modelo.tamanho - recebidos + 1))
                     if not bloco:
@@ -103,10 +106,14 @@ def _baixar_modelo(modelo: _Modelo) -> None:
         parcial = None
     except ModeloFacialIndisponivel:
         raise
-    except Exception:
+    except Exception as exc:
+        if isinstance(exc, OSError):
+            detalhe = 'verifique a conexão, o certificado SSL e as permissões da pasta .runtime/modelos'
+        else:
+            detalhe = 'verifique a integridade do download e as permissões da pasta .runtime/modelos'
         raise ModeloFacialIndisponivel(
-            'Não foi possível preparar os modelos faciais. Confira a conexão e a pasta .runtime/modelos.'
-        ) from None
+            f'Não foi possível preparar o modelo {modelo.arquivo}; {detalhe}.'
+        ) from exc
     finally:
         if parcial is not None:
             try:

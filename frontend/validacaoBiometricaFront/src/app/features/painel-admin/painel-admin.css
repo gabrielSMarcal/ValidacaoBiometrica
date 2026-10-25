@@ -25,3 +25,45 @@
   color: #31443a;
   font-size: 1.25rem;
 }
+
+.admin-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.admin-action {
+  display: grid;
+  gap: 0.5rem;
+  min-height: 7rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(15, 90, 60, 0.22);
+  border-radius: 1rem;
+  background: #f5faf7;
+  color: #0b1f17;
+  text-decoration: none;
+}
+
+.admin-action:hover {
+  border-color: #0f5a3c;
+  background: #eaf5ee;
+}
+
+.admin-action span {
+  color: #31443a;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.admin-action:focus-visible,
+.admin-panel > a:focus-visible {
+  outline: 3px solid rgba(15, 90, 60, 0.28);
+  outline-offset: 3px;
+}
+
+@media (max-width: 40rem) {
+  .admin-actions {
+    grid-template-columns: 1fr;
+  }
+}

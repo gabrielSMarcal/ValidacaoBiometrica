@@ -11,11 +11,8 @@ from app.modelos_faciais import ModeloFacialIndisponivel, preparar_modelos
 def main():
     try:
         preparar_modelos()
-    except ModeloFacialIndisponivel:
-        raise SystemExit(
-            'Não foi possível preparar os modelos faciais. Confira a conexão, as permissões '
-            'da pasta .runtime/modelos e tente novamente.'
-        ) from None
+    except ModeloFacialIndisponivel as exc:
+        raise SystemExit(str(exc)) from None
     print('Modelos faciais preparados e verificados.')
 
 

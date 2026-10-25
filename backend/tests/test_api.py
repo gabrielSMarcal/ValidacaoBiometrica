@@ -166,6 +166,32 @@ def test_credenciais_emitem_apenas_desafio_curto_sem_autorizar_sessao(api, captu
     assert api.client.cookies.get('aps_desafio') == token
 
 
+def test_login_administrador_retorna_usuario_e_inicia_sessao(api):
+    with Session(api.engine) as db:
+        administrador = db.scalar(select(Usuario).where(Usuario.nivel == 4))
+        cpf = '39053344705'
+        senha = 'Senha-admin-teste!'
+        if administrador is None:
+            referencia = str(uuid4())
+            administrador = Usuario(
+                biometria_ref=referencia, nome='Administrador de teste',
+                cpf_indice=api.seguranca.indice_cpf(cpf),
+                cpf_cifrado=api.seguranca.cifrar({'cpf': cpf}, referencia, 'cpf'),
+                senha_hash=api.seguranca.senhas.hash(senha),
+                assinatura_cifrada=None, nivel=4, ativo=True,
+            )
+            db.add(administrador)
+        else:
+            administrador.senha_hash = api.seguranca.senhas.hash(senha)
+        db.commit()
+
+    response = credenciais(api, cpf=cpf, senha=senha)
+
+    assert response.status_code == 200
+    assert response.json()['usuario']['nivel'] == 4
+    assert api.client.cookies.get('aps_sessao')
+
+
 def test_fluxo_dois_passos_nivel_sessao_e_logout(api, captura):
     assert cadastrar(api, captura, nivel=3).status_code == 201
     response = autenticar(api, captura)
@@ -374,4 +400,3 @@ def test_crud_de_usuarios_e_recadastro_biometrico(api, captura, outra_captura):
     exclusao = gerenciar(api, 'DELETE', '/api/usuarios/1')
     assert exclusao.status_code == 204 and exclusao.content == b''
     assert [u for u in gerenciar(api, 'GET', '/api/usuarios').json()['usuarios'] if u['nivel'] != 4] == []
-

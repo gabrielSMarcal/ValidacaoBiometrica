@@ -46,10 +46,11 @@ class Credenciais(Entrada):
     _cpf = field_validator('cpf')(normalizar_cpf)
 
 
-class Cadastro(Credenciais, Captura):
+class Cadastro(Credenciais, Entrada):
     
     nome: str = Field(min_length=2, max_length=120)
     nivel: Annotated[int, Field(strict=True, ge=1, le=3)]
+    frames: list[Frame] | None = Field(default=None, min_length=3, max_length=5)
 
     @field_validator('nome')
     @classmethod

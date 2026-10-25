@@ -1,8 +1,8 @@
-import { Component } from '@angular/core';
-import { inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { EMPTY, catchError } from 'rxjs';
 
-import { MockAuthService } from '../../core/services/mock-auth.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   imports: [RouterLink],
@@ -10,6 +10,14 @@ import { MockAuthService } from '../../core/services/mock-auth.service';
   styleUrl: './restricted-dashboard.css',
   templateUrl: './restricted-dashboard.html',
 })
-export class RestrictedDashboard {
-  protected readonly auth = inject(MockAuthService);
+export class RestrictedDashboard implements OnInit {
+  protected readonly auth = inject(AuthService);
+
+  ngOnInit(): void {
+    if (!this.auth.currentUser()) {
+      this.auth.carregarSessao().pipe(
+        catchError(() => EMPTY),
+      ).subscribe();
+    }
+  }
 }

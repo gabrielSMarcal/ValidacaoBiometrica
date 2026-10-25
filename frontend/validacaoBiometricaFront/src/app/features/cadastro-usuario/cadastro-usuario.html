@@ -1,0 +1,33 @@
+<main class="user-page" aria-labelledby="user-create-title">
+  <p class="eyebrow">Administração</p>
+  <h1 id="user-create-title">Cadastrar usuário</h1>
+  <p>Preencha os dados. Funcionários registrarão a biometria na próxima tela; administradores não precisam desse processo.</p>
+
+  <form [formGroup]="form" (ngSubmit)="cadastrar()">
+    <label for="nome">Nome</label>
+    <input id="nome" formControlName="nome" autocomplete="name">
+
+    <label for="cpf">CPF</label>
+    <input id="cpf" formControlName="cpf" inputmode="numeric" autocomplete="username">
+
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" formControlName="senha" autocomplete="new-password">
+
+    <label for="nivel">Nível</label>
+    <select id="nivel" formControlName="nivel">
+      <option [ngValue]="1">Funcionário nível 1</option>
+      <option [ngValue]="2">Funcionário nível 2</option>
+      <option [ngValue]="3">Funcionário nível 3</option>
+      <option [ngValue]="4">Administrador</option>
+    </select>
+
+    <p class="status" role="status" aria-live="polite">{{ statusMessage() }}</p>
+    @if (errorMessage()) {
+      <p class="error" role="alert">{{ errorMessage() }}</p>
+    }
+    <button type="submit" [disabled]="form.invalid || submitting()">
+      {{ submitting() ? 'Cadastrando…' : 'Cadastrar usuário' }}
+    </button>
+  </form>
+  <a routerLink="/painel-admin">Voltar ao painel</a>
+</main>

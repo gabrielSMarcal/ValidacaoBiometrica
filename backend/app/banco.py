@@ -21,7 +21,6 @@ class Usuario(Base):
     __tablename__ = 'usuarios'
     __table_args__ = (
         CheckConstraint('nivel BETWEEN 1 AND 4', name='ck_usuario_nivel'),
-        CheckConstraint('nivel = 4 OR assinatura_cifrada IS NOT NULL', name='ck_usuario_assinatura'),
         UniqueConstraint('admin_unico', name='uq_usuario_admin_unico'),
         {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'},
     )

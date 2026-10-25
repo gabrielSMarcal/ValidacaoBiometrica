@@ -344,13 +344,19 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         if db.scalar(select(Usuario.id).where(Usuario.cpf_indice == cpf_indice)):
             negar(db, request, 'cadastro', 'cpf_duplicado', 409, 'CPF já cadastrado.')
-        sig, processamento = captura(db, request, dados, 'cadastro')
+        if dados.frames is None:
+            sig, processamento = None, {'etapas': [], 'quadros': 0}
+        else:
+            sig, processamento = captura(db, request, dados, 'cadastro')
         referencia = str(uuid4())
         
         user = Usuario(biometria_ref=referencia, nome=dados.nome, cpf_indice=cpf_indice,
                        cpf_cifrado=seguranca.cifrar({'cpf': dados.cpf}, referencia, 'cpf'),
                        senha_hash=seguranca.senhas.hash(dados.senha), nivel=dados.nivel,
-                       assinatura_cifrada=seguranca.cifrar(sig, referencia, 'biometria'))
+                       assinatura_cifrada=(
+                           seguranca.cifrar(sig, referencia, 'biometria')
+                           if sig is not None else None
+                       ))
         
         try:
             db.add(user)
@@ -455,7 +461,8 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         if user.nivel == 4:
             autenticar(db, request, response, user, None, 'credenciais', motivo='administrador')
             return {'mensagem': 'CPF e senha confirmados. Sessão administrativa iniciada.',
-                    'expira_em_segundos': settings.session_minutes * 60}
+                    'expira_em_segundos': settings.session_minutes * 60,
+                    'usuario': publico(user)}
         
         token = secrets.token_urlsafe(32)
         db.execute(delete(DesafioBiometrico).where(DesafioBiometrico.expira_em <= agora()))

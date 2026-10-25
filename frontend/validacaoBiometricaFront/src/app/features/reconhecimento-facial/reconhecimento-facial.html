@@ -4,6 +4,20 @@
   <p>
     Olá, {{ auth.currentUser()?.nome }}. Posicione seu rosto diante da câmera para concluir a validação.
   </p>
-  <button type="button" (click)="confirmarReconhecimento()">Simular reconhecimento facial</button>
+  <div class="camera-frame">
+    <video #video autoplay muted playsinline aria-label="Imagem ao vivo da câmera para reconhecimento facial"></video>
+    <div class="face-guide" aria-hidden="true"></div>
+  </div>
+  <p class="camera-status" [class.camera-error]="cameraState() === 'erro'" role="status" aria-live="polite">
+    {{ statusMessage() }}
+  </p>
+  @if (biometricFailures() > 0 && biometricFailures() < 3) {
+    <p class="camera-attempts" role="status" aria-live="polite">
+      Falhas biométricas: {{ biometricFailures() }} de 3.
+    </p>
+  }
+  @if (errorMessage()) {
+    <p class="camera-error-message" role="alert">{{ errorMessage() }}</p>
+  }
   <a routerLink="/login">Voltar para o login</a>
 </main>

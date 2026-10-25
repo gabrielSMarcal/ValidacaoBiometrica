@@ -154,7 +154,8 @@ def test_admin_autentica_sem_captura_e_preserva_contrato(admin, monkeypatch, cpf
     monkeypatch.setattr('app.main.processar_captura', processamento)
     resposta = credenciais(admin, cpf=cpf, senha=SENHA_ADMIN_TESTE)
     assert resposta.status_code == 200
-    assert set(resposta.json()) == {'mensagem', 'expira_em_segundos'}
+    assert set(resposta.json()) == {'mensagem', 'expira_em_segundos', 'usuario'}
+    assert resposta.json()['usuario']['nivel'] == 4
     assert resposta.json()['expira_em_segundos'] == admin.settings.session_minutes * 60
     assert admin.client.cookies.get('aps_desafio') is None
     assert contar(admin, DesafioBiometrico) == 0
@@ -230,16 +231,15 @@ def test_nivel_4_nao_pode_ser_concedido_pela_api_nem_duplicado_no_banco(admin, c
     assert contar(admin, Usuario) == 2
 
 
-def test_usuario_comum_continua_exigindo_biometria_no_banco_e_no_login(admin, captura):
+def test_usuario_comum_pode_aguardar_biometria_sem_autenticar(admin, captura):
     usuario = cadastrar(admin, captura).json()['usuario']
     assert credenciais(admin, cpf=CPF_TESTE).status_code == 200
     assert admin.client.cookies.get('aps_desafio')
     assert admin.client.get('/api/sessao').status_code == 401
     with Session(admin.engine) as db:
         db.get(Usuario, usuario['id']).assinatura_cifrada = None
-        with pytest.raises(IntegrityError):
-            db.commit()
-    assert verificar(admin, captura).status_code == 200
+        db.commit()
+    assert verificar(admin, captura).status_code == 401
 
 
 @pytest.mark.parametrize('mariadb', [False, True])
