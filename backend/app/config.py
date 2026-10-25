@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
 from .esquemas import normalizar_cpf
+from .politica_biometrica import LIMIAR_EXPERIMENTAL, MARGEM_EXPERIMENTAL
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -41,11 +42,18 @@ class Settings(BaseSettings):
     biometric_key: SecretStr = Field(default_factory=chave_local, validate_default=True)
     allowed_origins: str = ('http://127.0.0.1:5500,http://localhost:5500,'
                             'http://127.0.0.1:8080,http://localhost:8080')
-    face_threshold: float = Field(default=0.30, gt=0, le=0.40)
-    face_margin: float = Field(default=0.03, gt=0, le=1)
     session_minutes: int = Field(default=15, ge=1, le=120)
     cookie_secure: bool = False
     rate_limit_per_minute: int = Field(default=20, ge=1, le=300)
+
+    @property
+    def face_threshold(self) -> float:
+        """Política do reconhecimento; valores antigos no .env são ignorados."""
+        return LIMIAR_EXPERIMENTAL
+
+    @property
+    def face_margin(self) -> float:
+        return MARGEM_EXPERIMENTAL
 
     @field_validator('admin_cpf')
     @classmethod

@@ -3,7 +3,6 @@ from dataclasses import replace
 import hashlib
 
 import numpy as np
-from pydantic import ValidationError
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,9 +12,8 @@ from app.biometria import _detectar_faces as detector_real
 from app.biometria import _inferir_embedding as inferencia_real
 import app.modelos_faciais as modelos
 from app.banco import DesafioBiometrico, LogAcesso, Sessao, Usuario
-from app.config import Settings
 from tests.test_api import (
-    CHAVE_TESTE, api, captura, cadastrar, contar, credenciais, gerenciar, verificar,
+    api, captura, cadastrar, contar, credenciais, gerenciar, verificar,
 )
 
 
@@ -150,9 +148,7 @@ def test_admin_tambem_nao_pode_substituir_biometria_com_vetor_enviado_pelo_clien
 
 
 @pytest.mark.parametrize('limiar', [0.400001, 0.5, 1.0])
-def test_configuracao_nao_permite_relaxar_limiar_acima_do_maximo(limiar):
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None, biometric_key=CHAVE_TESTE, face_threshold=limiar)
+def test_classificacao_nao_permite_limiar_acima_do_maximo(limiar):
     with pytest.raises(biometria.BiometriaErro):
         biometria.classificacao_interpretacao(assinatura_angular(0), [('1', assinatura_angular(0))],
                                             limiar=limiar)

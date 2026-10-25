@@ -512,7 +512,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
             negar(db, request, 'verificacao', 'assinatura_invalida', 503, 'Assinatura incompatível. Contate o operador.')
         
         if not resultado['identificado']:
-            negar(db, request, 'verificacao', 'face_nao_corresponde', mensagem='CPF e senha foram confirmados, mas a biometria não correspondeu. Repita a validação com o mesmo enquadramento e iluminação do cadastro.')
+            negar(db, request, 'verificacao', 'face_nao_corresponde', mensagem='CPF e senha foram confirmados, mas a biometria não correspondeu. Se estiver usando boné ou chapéu, retire-o e tente novamente. Repita a validação com o mesmo enquadramento e iluminação do cadastro.')
         
         processamento['classificacao_interpretacao'] = resultado
         db.refresh(user, with_for_update=True)

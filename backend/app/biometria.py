@@ -4,20 +4,24 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
+import logging
 import math
 from typing import Any
 
 import numpy as np
 
 from .modelos_faciais import ModeloFacialIndisponivel, detectar_faces, inferir_embedding
+from .politica_biometrica import (
+    FOCO_MINIMO_EXPERIMENTAL,
+    LIMIAR_EXPERIMENTAL,
+    LIMIAR_MAXIMO,
+    LIMITE_CONSISTENCIA,
+    MARGEM_EXPERIMENTAL,
+)
 
 
 GUIA = {"x": 0.25, "y": 0.10, "largura": 0.50, "altura": 0.80}
-LIMIAR_EXPERIMENTAL = 0.30
-LIMIAR_MAXIMO = 0.40
-MARGEM_EXPERIMENTAL = 0.03
-LIMITE_CONSISTENCIA = 0.25
-FOCO_MINIMO_EXPERIMENTAL = 1.5
 ALGORITMO = "auraface-v1-arcface-r100-yunet-112-v3"
 VERSAO = 3
 DIMENSAO = 512
@@ -27,6 +31,15 @@ _PONTOS_ALINHAMENTO = np.array([
     [38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
     [41.5493, 92.3655], [70.7299, 92.2041],
 ], dtype=np.float64)
+
+# Herda o handler do Uvicorn para aparecer no terminal com a inicialização atual.
+_LOGGER = logging.getLogger("uvicorn.error.biometria")
+
+
+def _registrar_diagnostico(evento: str, **metricas: Any) -> None:
+    _LOGGER.info("biometria_diagnostico %s", json.dumps(
+        {"evento": evento, **metricas}, ensure_ascii=False, allow_nan=False,
+    ))
 
 
 class BiometriaErro(ValueError):
@@ -336,7 +349,7 @@ def classificacao_interpretacao(
     if not isinstance(candidatos, list):
         raise BiometriaErro("Os candidatos devem ser uma lista de identificadores e assinaturas.")
     
-    resultados, ids = [], set()
+    resultados, ids, diagnosticos = [], set(), {}
     
     for candidato in candidatos:
     
@@ -349,14 +362,25 @@ def classificacao_interpretacao(
             raise BiometriaErro("Cada candidato deve possuir um identificador único.")
     
         ids.add(usuario_id)
-        distancia = comparar_assinaturas(assinatura, cadastrada)
+        distancia_media = comparar_assinaturas(assinatura, cadastrada)
+        distancia = distancia_media
+        distancias_quadros = []
         amostras = assinatura.get("amostras", [])
         if not isinstance(amostras, list) or (amostras and not 3 <= len(amostras) <= 5):
             raise BiometriaErro("Amostras da assinatura biométrica inválidas.")
         for vetor in amostras:
             amostra = {"versao": VERSAO, "algoritmo": ALGORITMO, "dimensao": DIMENSAO, "vetor": vetor}
-            distancia = max(distancia, comparar_assinaturas(amostra, cadastrada))
+            distancia_quadro = comparar_assinaturas(amostra, cadastrada)
+            distancias_quadros.append(distancia_quadro)
+            distancia = max(distancia, distancia_quadro)
         resultados.append((distancia, usuario_id))
+        diagnosticos[usuario_id] = {
+            "distancia_media": round(distancia_media, 6),
+            "distancias_quadros": [round(valor, 6) for valor in distancias_quadros],
+            "quadros_fora_do_limiar": [
+                indice for indice, valor in enumerate(distancias_quadros, 1) if valor > limiar
+            ],
+        }
     
     resultados.sort()
     resultado = {"identificado": False, "usuario_id": None, "distancia": None,
@@ -377,6 +401,14 @@ def classificacao_interpretacao(
     
     else:
         resultado.update(identificado=True, usuario_id=usuario_id, motivo="identificado")
+
+    _registrar_diagnostico(
+        "comparacao", **diagnosticos[usuario_id],
+        distancia_decisao=round(melhor, 6),
+        segunda_distancia=round(segunda, 6) if segunda is not None else None,
+        limiar=limiar, margem=margem, candidatos=len(resultados),
+        identificado=resultado["identificado"], motivo=resultado["motivo"],
+    )
     
     return resultado
 
@@ -402,11 +434,22 @@ def processar_captura(frames: list[dict[str, Any]]) -> tuple[dict[str, Any], dic
             assinaturas.append(extracao_caracteristicas(segmento))
             qualidades.append(segmento["qualidade"])
         except BiometriaErro as exc:
+            _registrar_diagnostico(
+                "captura", aceita=False, quadro=indice, motivo=str(exc),
+            )
             raise type(exc)(f"Quadro {indice}: {exc}") from exc
     
     maior_distancia = max(
         comparar_assinaturas(a, b)
         for indice, a in enumerate(assinaturas) for b in assinaturas[indice + 1:]
+    )
+
+    _registrar_diagnostico(
+        "captura", aceita=maior_distancia <= LIMITE_CONSISTENCIA,
+        qualidade_quadros=qualidades,
+        maior_distancia_entre_quadros=round(maior_distancia, 6),
+        limite_consistencia=LIMITE_CONSISTENCIA,
+        motivo="quadros_consistentes" if maior_distancia <= LIMITE_CONSISTENCIA else "quadros_inconsistentes",
     )
     
     if maior_distancia > LIMITE_CONSISTENCIA:

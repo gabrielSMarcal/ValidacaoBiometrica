@@ -1,5 +1,7 @@
 # Processamento de imagens e assinatura biométrica
 
+> Documento histórico do pipeline MobileNetV2. A implementação atual usa YuNet e AuraFace; consulte o [README atual](../README.md). Seus parâmetros ficam em `app/politica_biometrica.py` e não são configurados pelo ambiente.
+
 O núcleo está isolado em `app/biometria.py`. O módulo recebe quadros RGB vivos,
 controla a qualidade, recorta a região facial guiada, executa o TensorFlow e
 compara embeddings. Rotas, banco e front não implementam operações de visão.
@@ -62,8 +64,10 @@ divergentes são recusados antes do armazenamento. A comparação usa:
 distância = (1 - cosseno(a, b)) / 2
 ```
 
-Zero representa embeddings iguais. O limite inicial `FACE_THRESHOLD=0.20` é
-experimental e precisa ser calibrado com capturas genuínas e impostoras.
+Zero representa embeddings iguais. O limite inicial desta versão histórica era
+`0.20`. A versão atual usa `LIMIAR_EXPERIMENTAL = 0.30`, definido em
+`app/politica_biometrica.py`, e precisa ser avaliada com capturas genuínas e de
+pessoas diferentes.
 
 ## Persistência e limites
 

@@ -86,6 +86,8 @@ As variáveis de ambiente têm prioridade sobre os valores de `backend/.env`. O 
 
 Os padrões de conexão atendem a algumas instalações locais do XAMPP. Ajuste-os para a conta e o servidor efetivamente utilizados. O arquivo `sql/criar_banco.sql` é uma alternativa manual para provisionar a conta MySQL `aps_app`; ajuste a senha desse arquivo e a configuração da conexão antes de utilizá-lo.
 
+Os parâmetros do reconhecimento facial ficam versionados em `app/politica_biometrica.py`: limite de correspondência `0.30`, margem `0.03`, limite de consistência entre quadros `0.25` e foco mínimo `1.5`. Entradas antigas `FACE_THRESHOLD` e `FACE_MARGIN` no `.env` ou nas variáveis de ambiente são ignoradas. A equipe recebe esses mesmos valores ao atualizar o código, sem compartilhar o `.env` privado. Mudanças futuras dessa política devem ser acompanhadas de testes com capturas genuínas e de pessoas diferentes.
+
 ### Criação do administrador
 
 Quando ainda não existe um administrador no banco, a inicialização exige `ADMIN_CPF` e `ADMIN_PASSWORD_HASH`. O nível 4 é exclusivo desse administrador, cujo login usa CPF e senha sem exigir biometria.
@@ -180,6 +182,29 @@ A verificação e o recadastro biométrico recebem um objeto com `frames`. Cada 
 
 São aceitos de três a cinco quadros com dimensões iguais, entre 160 × 120 e 640 × 480, com limite de requisição de 8 MiB. No cadastro inicial, o corpo inclui também `nome`, `cpf`, `senha` e `nivel`, conforme o Swagger. A assinatura de 512 dimensões é gerada no servidor a partir dos pixels recebidos.
 
+### Diagnóstico de óculos e variações na captura
+
+O terminal do Uvicorn exibe linhas com o prefixo `biometria_diagnostico`, em JSON. São registros internos: não acrescentam campos às respostas da API nem à tabela `logs_acesso` e não contêm CPF, senha, identificadores de usuários, imagens ou vetores biométricos.
+
+O evento `captura` informa a qualidade dos quadros, a maior distância entre eles e o limite de consistência. Se o processamento de um quadro falhar, informa seu número e o motivo da recusa.
+
+O evento `comparacao` é emitido tanto nas correspondências aceitas quanto nas recusadas. Ele descreve a comparação com o candidato de menor distância:
+
+| Campo | Como interpretar |
+| --- | --- |
+| `distancia_media` | Distância entre o vetor médio da captura e a referência cadastrada. Não é a média das distâncias dos quadros. |
+| `distancias_quadros` | Distância de cada quadro para a referência, na ordem de captura. Quanto menor, maior a semelhança. |
+| `quadros_fora_do_limiar` | Números dos quadros que excederam o limite, começando em 1. |
+| `distancia_decisao` | Maior valor entre `distancia_media` e `distancias_quadros`, todos calculados contra a referência cadastrada; é o valor usado na decisão. |
+| `limiar` | Limite configurado de aceitação. Os valores exibidos são arredondados; a decisão usa a precisão original. |
+| `identificado` e `motivo` | Resultado da comparação e motivo da aceitação ou recusa. |
+
+Para investigar óculos, compare tentativas da mesma pessoa com e sem óculos, mantendo câmera, enquadramento e iluminação semelhantes, e repita testes com pessoas diferentes. Confirme CPF e senha novamente antes de cada tentativa: o desafio é consumido mesmo quando a biometria é recusada. Tentativas com `desafio_ausente` não chegam à comparação e não geram suas métricas.
+
+Um quadro isolado acima do limite e todos os quadros acima do limite são situações diferentes; as métricas ajudam a distingui-las. Elas não detectam automaticamente óculos nem comprovam a causa da recusa. Esta instrumentação não muda os limiares, a assinatura cadastrada ou a exigência de correspondência de todos os quadros. O reconhecimento com óculos ainda precisa ser avaliado com capturas reais antes de qualquer calibração.
+
+Confira o campo `limiar` no log: ele deve mostrar o valor `0.30` centralizado em `app/politica_biometrica.py`, mesmo em instalações que ainda tenham `FACE_THRESHOLD=0.20` no `.env`. Uma distância de decisão `0.28` fica dentro desse limite numa comparação 1:1. Depois de atualizar o código, reinicie a API e teste tanto a mesma pessoa com e sem óculos quanto pessoas diferentes; uma tentativa aceita não comprova a acurácia geral.
+
 ## Testes
 
 Instale as dependências adicionais de desenvolvimento:
@@ -230,6 +255,7 @@ Esse comando atua no banco configurado, cria um cadastro temporário e uma sess�
 | `app/seguranca.py` | AES-GCM, HMAC, Argon2id e hashes de tokens. |
 | `app/esquemas.py` | Validação dos dados recebidos pela API. |
 | `app/config.py` | Leitura da configuração e gestão da chave local. |
+| `app/politica_biometrica.py` | Parâmetros versionados do reconhecimento facial, sem sobrescrita pelo ambiente. |
 | `app/inicializar.py` | Preparação do banco, atualização de estrutura e criação do admin. |
 | `scripts/preparar_modelos.py` | Preparação explícita dos modelos faciais. |
 | `scripts/configurar.py` | Geração opcional da configuração local. |
