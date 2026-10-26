@@ -3,7 +3,6 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
-import { ApiError } from '../../core/models/validation-error/api-error.model';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
@@ -41,20 +40,13 @@ export class LoginPage {
         this.auth.isAdmin(resposta.usuario) ? '/painel-admin' : '/reconhecimento-facial',
       );
     } catch (error: unknown) {
-      this.errorMessage.set(this.describeError(error));
+      this.errorMessage.set(this.describeError());
     } finally {
       this.submitting.set(false);
     }
   }
 
-  private describeError(error: unknown): string {
-    const apiError = error as Partial<ApiError>;
-    if (apiError.status === 401) {
-      return 'CPF ou senha inválidos.';
-    }
-    if (typeof apiError.detail === 'string') {
-      return apiError.detail;
-    }
-    return 'Não foi possível acessar o sistema. Tente novamente.';
+  private describeError(): string {
+    return 'Algo deu errado, tente novamente mais tarde.';
   }
 }

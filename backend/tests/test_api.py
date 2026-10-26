@@ -234,19 +234,22 @@ def test_desafio_fixa_usuario_e_rosto_de_outro_cadastro_e_recusado(api, captura,
     token = api.client.cookies.get('aps_desafio')
     response = verificar(api, outra_captura)
     assert response.status_code == 401 and contar(api, Sessao) == 0
-    assert contar(api, DesafioBiometrico) == 0
-    assert verificar(api, captura, headers={'Cookie': f'aps_desafio={token}'}).status_code == 401
+    assert contar(api, DesafioBiometrico) == 1
+    assert api.client.cookies.get('aps_desafio') == token
+    assert verificar(api, captura).status_code == 200
     assert autenticar(api, outra_captura, cpf=OUTRO_CPF).json()['usuario']['id'] == 2
 
 
-def test_desafio_consumido_mesmo_quando_captura_invalida(api, captura):
+def test_desafio_persiste_para_nova_tentativa_quando_captura_invalida(api, captura):
     assert cadastrar(api, captura).status_code == 201
     assert credenciais(api).status_code == 200
     token = api.client.cookies.get('aps_desafio')
     invalida = {'frames': [{'largura': 320, 'altura': 240, 'rgb_base64': 'buffer-invalido'}] * 3}
     assert verificar(api, invalida).status_code == 422
+    assert contar(api, DesafioBiometrico) == 1
+    assert api.client.cookies.get('aps_desafio') == token
+    assert verificar(api, captura).status_code == 200
     assert contar(api, DesafioBiometrico) == 0
-    assert verificar(api, captura, headers={'Cookie': f'aps_desafio={token}'}).status_code == 401
 
 
 def test_desafio_expirado_e_replay_apos_sucesso_nao_autorizam(api, captura):

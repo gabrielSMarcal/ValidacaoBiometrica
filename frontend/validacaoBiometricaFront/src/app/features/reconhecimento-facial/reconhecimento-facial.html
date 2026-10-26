@@ -2,22 +2,40 @@
   <p class="eyebrow">Segunda etapa de acesso</p>
   <h1 id="face-recognition-title">Reconhecimento facial</h1>
   <p>
-    Olá, {{ auth.currentUser()?.nome }}. Posicione seu rosto diante da câmera para concluir a validação.
+    Olá, {{ auth.currentUser()?.nome }}. Abra a câmera e faça a captura quando estiver pronto.
   </p>
-  <div class="camera-frame">
-    <video #video autoplay muted playsinline aria-label="Imagem ao vivo da câmera para reconhecimento facial"></video>
-    <div class="face-guide" aria-hidden="true"></div>
-  </div>
+  @if (cameraState() !== 'fechada') {
+    <div class="camera-frame">
+      <video #video autoplay muted playsinline aria-label="Imagem ao vivo da câmera para reconhecimento facial"></video>
+      <div class="face-guide" aria-hidden="true"></div>
+    </div>
+  }
   <p class="camera-status" [class.camera-error]="cameraState() === 'erro'" role="status" aria-live="polite">
     {{ statusMessage() }}
   </p>
+  @if (cameraState() === 'fechada' || cameraState() === 'erro') {
+    <button type="button" (click)="openCamera()">
+      {{ cameraState() === 'erro' ? 'Tentar abrir a câmera' : 'Abrir câmera' }}
+    </button>
+  }
+  @if (cameraState() === 'detectando') {
+    <button type="button" [disabled]="captureCooldown() > 0" (click)="confirmarReconhecimento()">
+      {{ captureCooldown() > 0 ? 'Aguarde ' + captureCooldown() + 's' : 'Fazer captura' }}
+    </button>
+  }
+  @if (captureInProgress()) {
+    <p class="camera-status" role="status" aria-live="polite">Processando captura…</p>
+  }
   @if (biometricFailures() > 0 && biometricFailures() < 3) {
     <p class="camera-attempts" role="status" aria-live="polite">
       Falhas biométricas: {{ biometricFailures() }} de 3.
     </p>
   }
   @if (errorMessage()) {
-    <p class="camera-error-message" role="alert">{{ errorMessage() }}</p>
+    <div class="camera-notification" role="alert" aria-live="assertive">
+      <strong>Não foi possível concluir a captura</strong>
+      <span>{{ errorMessage() }}</span>
+    </div>
   }
   <a routerLink="/login">Voltar para o login</a>
 </main>

@@ -171,15 +171,12 @@ def test_api_real_vincula_face_ao_cpf_e_nao_autentica_outra_pessoa(api, assinatu
 
     rejeitado = verificar(api, face_diferente)
     assert rejeitado.status_code == 401, rejeitado.text
-    assert contar(api, Sessao) == contar(api, DesafioBiometrico) == 0
+    assert contar(api, Sessao) == 0 and contar(api, DesafioBiometrico) == 1
     assert not api.client.cookies.get("aps_sessao")
     assert api.client.get("/api/sessao").status_code == 401
     replay = verificar(api, mesma_pessoa, headers={"Cookie": f"aps_desafio={desafio_inicial}"})
-    assert replay.status_code == 401
-    assert contar(api, Sessao) == 0
-
-    assert credenciais(api).status_code == 200
-    aceito = verificar(api, mesma_pessoa)
+    assert replay.status_code == 200
+    aceito = replay
     assert aceito.status_code == 200, aceito.text
     assert aceito.json()["usuario"]["id"] == usuario_id
     assert aceito.json()["usuario"]["nivel"] == 3

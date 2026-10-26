@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
 import { firstValueFrom } from 'rxjs';
@@ -14,33 +14,41 @@ import { UsuarioService } from '../../core/services/usuario.service';
   styleUrl: './reconhecimento-facial.css',
   templateUrl: './reconhecimento-facial.html',
 })
-export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
+export class ReconhecimentoFacial implements OnDestroy {
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly usuarioService = inject(UsuarioService);
-  protected readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('video');
-  protected readonly cameraState = signal<'abrindo' | 'detectando' | 'capturando' | 'erro'>('abrindo');
-  protected readonly statusMessage = signal('Solicitando acesso à câmera…');
+  protected readonly video = viewChild<ElementRef<HTMLVideoElement>>('video');
+  protected readonly cameraState = signal<'fechada' | 'abrindo' | 'detectando' | 'capturando' | 'erro'>('fechada');
+  protected readonly statusMessage = signal('Abra a câmera para iniciar a validação facial.');
   protected readonly errorMessage = signal('');
   protected readonly captureInProgress = signal(false);
+  protected readonly captureCooldown = signal(0);
   protected readonly biometricFailures = signal(0);
   private readonly canvas = document.createElement('canvas');
   private stream: MediaStream | null = null;
   private faceDetector: FaceDetector | null = null;
   private detectionTimer: ReturnType<typeof setTimeout> | null = null;
+  private cooldownTimer: ReturnType<typeof setInterval> | null = null;
   private stableDetections = 0;
   private readonly enrollmentUserId = Number(this.route.snapshot.queryParamMap.get('cadastroId'));
 
-  ngAfterViewInit(): void {
-    void this.openCamera();
-  }
-
   ngOnDestroy(): void {
     this.stopCamera();
+    this.stopCooldown();
   }
 
   async openCamera(): Promise<void> {
+    if (this.cameraState() === 'abrindo' || this.cameraState() === 'detectando' || this.cameraState() === 'capturando') {
+      return;
+    }
+
+    this.stopCamera();
+    this.cameraState.set('abrindo');
+    this.statusMessage.set('Solicitando acesso à câmera…');
+    this.errorMessage.set('');
+
     if (!navigator.mediaDevices?.getUserMedia) {
       this.showCameraError('Este navegador não oferece acesso à câmera.');
       return;
@@ -55,7 +63,11 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
           height: { ideal: 480, max: 480 },
         },
       });
-      const videoElement = this.video().nativeElement;
+      const videoElement = this.video()?.nativeElement;
+      if (!videoElement) {
+        this.showCameraError('Não foi possível preparar a visualização da câmera.');
+        return;
+      }
       videoElement.srcObject = this.stream;
       await videoElement.play();
       this.statusMessage.set('Carregando detector facial…');
@@ -71,7 +83,7 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
         minDetectionConfidence: 0.6,
       });
       this.cameraState.set('detectando');
-      this.statusMessage.set('Posicione seu rosto dentro do guia para iniciar a captura.');
+      this.statusMessage.set('Posicione seu rosto dentro do guia e clique em "Fazer captura".');
       this.scheduleFaceDetection();
     } catch (error: unknown) {
       if (this.stream === null) {
@@ -91,7 +103,7 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
   }
 
   async capturarReconhecimento(): Promise<void> {
-    if (this.cameraState() !== 'detectando' || this.captureInProgress()) {
+    if (this.cameraState() !== 'detectando' || this.captureInProgress() || this.captureCooldown() > 0) {
       return;
     }
 
@@ -132,11 +144,11 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
       }
 
       this.cameraState.set('detectando');
-      this.statusMessage.set(`A captura não foi concluída. Tentativa ${failures} de 3.`);
+      this.statusMessage.set(`A captura não foi concluída. Tentativa ${failures} de 3. Aguarde antes de tentar novamente.`);
       this.errorMessage.set(this.getErrorMessage(error));
-      this.scheduleFaceDetection();
     } finally {
       this.captureInProgress.set(false);
+      this.startCaptureCooldown();
     }
   }
 
@@ -160,8 +172,12 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
     }
 
     try {
+      const videoElement = this.video()?.nativeElement;
+      if (!videoElement) {
+        return;
+      }
       const detections = this.faceDetector.detectForVideo(
-        this.video().nativeElement,
+        videoElement,
         performance.now(),
       );
       const face = detections.detections[0]?.boundingBox;
@@ -172,13 +188,9 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
         this.stableDetections += 1;
         this.statusMessage.set(
           this.stableDetections >= 3
-            ? 'Rosto detectado. Capturando…'
+            ? 'Rosto detectado. Clique em "Fazer captura" para continuar.'
             : 'Rosto detectado. Permaneça imóvel…',
         );
-        if (this.stableDetections >= 3) {
-          await this.capturarReconhecimento();
-          return;
-        }
       }
     } catch {
       this.stableDetections = 0;
@@ -194,7 +206,10 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
     width: number;
     height: number;
   }): boolean {
-    const videoElement = this.video().nativeElement;
+    const videoElement = this.video()?.nativeElement;
+    if (!videoElement) {
+      return false;
+    }
     const width = videoElement.videoWidth;
     const height = videoElement.videoHeight;
     if (!width || !height) {
@@ -212,7 +227,10 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
   }
 
   private captureFrame(): Frame {
-    const videoElement = this.video().nativeElement;
+    const videoElement = this.video()?.nativeElement;
+    if (!videoElement) {
+      throw new Error('A visualização da câmera não está disponível.');
+    }
     const largura = 640;
     const altura = 480;
     this.canvas.width = largura;
@@ -258,6 +276,27 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
     }
   }
 
+  private startCaptureCooldown(): void {
+    this.stopCooldown();
+    this.captureCooldown.set(3);
+    this.cooldownTimer = setInterval(() => {
+      this.captureCooldown.update((seconds) => {
+        if (seconds <= 1) {
+          this.stopCooldown();
+          return 0;
+        }
+        return seconds - 1;
+      });
+    }, 1000);
+  }
+
+  private stopCooldown(): void {
+    if (this.cooldownTimer !== null) {
+      clearInterval(this.cooldownTimer);
+      this.cooldownTimer = null;
+    }
+  }
+
   private showCameraError(message: string): void {
     this.cameraState.set('erro');
     this.statusMessage.set('Câmera indisponível.');
@@ -265,20 +304,22 @@ export class ReconhecimentoFacial implements AfterViewInit, OnDestroy {
   }
 
   private getErrorMessage(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
     if (this.isApiError(error)) {
       if (typeof error.detail === 'string') {
         return error.detail;
       }
-      const validationMessage = error.detail
-        .map((item) => item.msg)
-        .filter(Boolean)
-        .join(' ');
+      const validationMessage = Array.isArray(error.detail)
+        ? error.detail
+          .map((item) => item.msg)
+          .filter(Boolean)
+          .join(' ')
+        : '';
       if (validationMessage) {
         return validationMessage;
       }
+    }
+    if (error instanceof Error) {
+      return error.message;
     }
     return 'Não foi possível validar a biometria. Tente novamente.';
   }

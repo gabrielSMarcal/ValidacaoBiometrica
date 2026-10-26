@@ -65,6 +65,23 @@
   color: #a32929 !important;
 }
 
+.camera-notification {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1rem auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid #e0a4a4;
+  border-radius: 0.75rem;
+  background: #fff3f3;
+  color: #7d1f1f;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.camera-notification strong {
+  color: #681616;
+}
+
 .face-recognition button {
   display: block;
   min-height: 2.875rem;

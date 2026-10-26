@@ -321,7 +321,9 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         
         resposta = JSONResponse({'detail': exc.detail}, status_code=exc.status_code, headers=exc.headers)
         
-        if request.url.path.startswith('/api/autenticacao/'):
+        preservar_desafio = request.url.path == '/api/autenticacao/verificar' \
+            and getattr(request.state, 'preservar_desafio', False)
+        if request.url.path.startswith('/api/autenticacao/') and not preservar_desafio:
             limpar_cookies(resposta)
         
         elif request.url.path == '/api/sessao':
@@ -491,24 +493,34 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
             negar(db, request, 'verificacao', 'desafio_ausente', mensagem='Confirme CPF e senha antes da biometria.')
         user_id, fingerprint, expiracao = desafio.usuario_id, desafio.senha_fingerprint, desafio.expira_em
         
-        db.delete(desafio)
-        db.commit()
-        
         if expiracao <= agora():
+            db.delete(desafio)
+            db.commit()
             negar(db, request, 'verificacao', 'desafio_expirado', mensagem='O prazo da biometria expirou. Informe CPF e senha novamente.')
         
         user = db.get(Usuario, user_id)
         
         if not user or not user.ativo or fingerprint_autorizacao(user) != fingerprint:
+            db.delete(desafio)
+            db.commit()
             negar(db, request, 'verificacao', 'desafio_invalidado', mensagem='A autorização mudou. Informe CPF e senha novamente.')
+        request.state.preservar_desafio = True
         sig, processamento = captura(db, request, dados, 'verificacao')
         
-        armazenada = assinatura(db, request, user, 'verificacao')
+        try:
+            armazenada = assinatura(db, request, user, 'verificacao')
+        except HTTPException:
+            request.state.preservar_desafio = False
+            db.delete(desafio)
+            db.commit()
+            raise
         
         try:
             resultado = classificacao_interpretacao(sig, [(str(user.id), armazenada)], settings.face_threshold, settings.face_margin)
         
         except BiometriaErro:
+            request.state.preservar_desafio = False
+            db.delete(desafio)
             negar(db, request, 'verificacao', 'assinatura_invalida', 503, 'Assinatura incompatível. Contate o operador.')
         
         if not resultado['identificado']:
@@ -518,8 +530,11 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         db.refresh(user, with_for_update=True)
         
         if not user.ativo or fingerprint_autorizacao(user) != fingerprint:
+            db.delete(desafio)
+            db.commit()
             negar(db, request, 'verificacao', 'desafio_invalidado', mensagem='A autorização mudou. Informe CPF e senha novamente.')
         
+        db.delete(desafio)
         return autenticar(db, request, response, user, processamento, 'verificacao')
 
     @app.get('/api/sessao', tags=['Sessão'])
