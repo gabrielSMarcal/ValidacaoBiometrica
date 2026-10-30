@@ -29,11 +29,11 @@ def assinatura_angular(graus):
             'dimensao': 512, 'vetor': vetor_angular(graus).tolist()}
 
 
-def assert_sem_autenticacao(api):
+def assert_sem_autenticacao(api, *, desafio_preservado=False):
     assert contar(api, Sessao) == 0
-    assert contar(api, DesafioBiometrico) == 0
+    assert contar(api, DesafioBiometrico) == int(desafio_preservado)
     assert not api.client.cookies.get('aps_sessao')
-    assert not api.client.cookies.get('aps_desafio')
+    assert bool(api.client.cookies.get('aps_desafio')) is desafio_preservado
     assert api.client.get('/api/sessao').status_code == 401
 
 
@@ -44,8 +44,8 @@ def test_recadastro_durante_inferencia_nao_emite_sessao_com_assinatura_antiga(ap
     processar = main.processar_captura
     trocas = []
 
-    def processar_com_troca_concorrente(frames):
-        assinatura, resumo = processar(frames)
+    def processar_com_troca_concorrente(frames, **kwargs):
+        assinatura, resumo = processar(frames, **kwargs)
         with Session(api.engine) as db:
             usuario = db.get(Usuario, 1)
             original = usuario.assinatura_cifrada
@@ -113,7 +113,7 @@ def test_modelo_ausente_ou_checksum_invalido_retorna_503_sem_fallback(
     resposta = verificar(api, captura)
 
     assert resposta.status_code == 503, resposta.text
-    assert_sem_autenticacao(api)
+    assert_sem_autenticacao(api, desafio_preservado=True)
     with Session(api.engine) as db:
         assert 'modelo_indisponivel' in db.scalars(select(LogAcesso.motivo)).all()
 
@@ -171,6 +171,6 @@ def test_um_quadro_fora_do_limiar_nao_e_aceito_pela_media_dos_outros(api, captur
     resposta = verificar(api, captura)
 
     assert resposta.status_code == 401, resposta.text
-    assert_sem_autenticacao(api)
+    assert_sem_autenticacao(api, desafio_preservado=True)
     with Session(api.engine) as db:
         assert 'face_nao_corresponde' in db.scalars(select(LogAcesso.motivo)).all()

@@ -13,11 +13,18 @@ import numpy as np
 
 from .modelos_faciais import ModeloFacialIndisponivel, detectar_faces, inferir_embedding
 from .politica_biometrica import (
+    CONTRASTE_MINIMO,
     FOCO_MINIMO_EXPERIMENTAL,
+    ILUMINACAO_MAXIMA,
+    ILUMINACAO_MINIMA,
     LIMIAR_EXPERIMENTAL,
     LIMIAR_MAXIMO,
     LIMITE_CONSISTENCIA,
     MARGEM_EXPERIMENTAL,
+    MOVIMENTO_MINIMO,
+    POSE_FRONTAL_MAXIMA,
+    POSE_MAXIMA,
+    SATURACAO_MAXIMA,
 )
 
 
@@ -190,9 +197,14 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any
     if faces.ndim != 2 or faces.shape[1] != 15 or not np.isfinite(faces).all():
         raise BiometriaErro("O detector retornou dados faciais inválidos.")
     if len(faces) == 0:
+        iluminacao = float(cinza.mean())
+        if iluminacao < ILUMINACAO_MINIMA:
+            raise BiometriaErro("A imagem está muito escura. Aumente a iluminação sobre o rosto e tente novamente.")
+        if iluminacao > ILUMINACAO_MAXIMA:
+            raise BiometriaErro("A imagem está muito clara. Reduza a iluminação direta sobre o rosto e tente novamente.")
         raise BiometriaErro("Nenhum rosto detectado. Enquadre o rosto e ajuste a iluminação.")
     if len(faces) != 1:
-        raise BiometriaErro("Capture apenas um rosto por vez.")
+        raise BiometriaErro("Capture apenas um rosto por vez. Afaste as outras pessoas e refaça toda a sequência.")
     x, y, face_largura, face_altura = faces[0, :4]
     if (faces[0, 14] < 0.90 or min(face_largura, face_altura) < 64
             or face_largura * face_altura < largura * altura * 0.02
@@ -204,6 +216,9 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any
             or pontos[1, 0] <= pontos[0, 0]
             or pontos[:2, 1].mean() >= pontos[3:, 1].mean()):
         raise BiometriaErro("Os pontos faciais não permitem validar o rosto.")
+    eixo_olhos = pontos[1] - pontos[0]
+    centro_olhos = (pontos[0] + pontos[1]) / 2
+    pose_horizontal = float(np.dot(pontos[2] - centro_olhos, eixo_olhos) / np.dot(eixo_olhos, eixo_olhos))
     x0, y0 = max(0, int(x)), max(0, int(y))
     x1, y1 = min(largura, int(np.ceil(x + face_largura))), min(altura, int(np.ceil(y + face_altura)))
     regiao_cinza, regiao_rgb = cinza[y0:y1, x0:x1], rgb[y0:y1, x0:x1]
@@ -218,13 +233,16 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any
     )
     foco = float(laplaciano[mascara_original[1:-1, 1:-1]].std())
     
-    if not 35 <= media <= 225:
-        raise BiometriaErro("Melhore a iluminação: evite ambiente escuro ou luz excessiva.")
+    if media < ILUMINACAO_MINIMA:
+        raise BiometriaErro("O rosto está com pouca iluminação. Aumente a luz sobre o rosto, evitando luz forte atrás de você.")
+
+    if media > ILUMINACAO_MAXIMA:
+        raise BiometriaErro("Há iluminação excessiva no rosto. Reduza a luz direta e os reflexos antes de tentar novamente.")
     
-    if contraste < 14:
+    if contraste < CONTRASTE_MINIMO:
         raise BiometriaErro("A região tem pouco contraste. Ajuste a iluminação e o enquadramento.")
     
-    if saturacao > 0.55:
+    if saturacao > SATURACAO_MAXIMA:
         raise BiometriaErro("Há muitos pixels saturados. Evite luz direta e sombras intensas.")
     
     if foco < FOCO_MINIMO_EXPERIMENTAL:
@@ -236,6 +254,7 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray) -> dict[str, Any
     return {
         "imagem": np.clip(imagem, 0, 255).astype(np.float32),
         "mascara": mascara,
+        "pose_horizontal": pose_horizontal,
         "qualidade": {
             "iluminacao_media": round(media, 3),
             "contraste_desvio": round(contraste, 3),
@@ -413,15 +432,47 @@ def classificacao_interpretacao(
     return resultado
 
 
-def processar_captura(frames: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _validar_movimento(segmentos: list[dict[str, Any]]) -> None:
+    """Exige poses opostas na sequência; não comprova presença nem prova de vida."""
+    poses = [segmento["pose_horizontal"] for segmento in segmentos]
+    frente, direita, esquerda = poses[:3]
+    deslocamentos = [pose - frente for pose in poses]
+    mensagem, motivo = None, "sequencia_valida"
+    if any(abs(pose) > POSE_MAXIMA for pose in poses):
+        mensagem = "Vire a cabeça apenas levemente e mantenha os dois olhos visíveis durante toda a captura."
+        motivo = "rotacao_excessiva"
+    elif abs(frente) > POSE_FRONTAL_MAXIMA:
+        mensagem = "Comece a sequência olhando de frente para a câmera."
+        motivo = "primeiro_quadro_nao_frontal"
+    elif direita - frente > -MOVIMENTO_MINIMO:
+        mensagem = "Na segunda captura, vire levemente a cabeça para a sua direita. Refaça toda a sequência."
+        motivo = "movimento_direita_insuficiente"
+    elif esquerda - frente < MOVIMENTO_MINIMO:
+        mensagem = "Na terceira captura, vire levemente a cabeça para a sua esquerda. Refaça toda a sequência."
+        motivo = "movimento_esquerda_insuficiente"
+
+    _registrar_diagnostico(
+        "movimento", aceita=mensagem is None, motivo=motivo,
+        poses_horizontais=[round(pose, 6) for pose in poses],
+        deslocamentos_horizontais=[round(valor, 6) for valor in deslocamentos],
+        limite_frontal=POSE_FRONTAL_MAXIMA, limite_pose=POSE_MAXIMA,
+        movimento_minimo=MOVIMENTO_MINIMO,
+    )
+    if mensagem:
+        raise BiometriaErro(mensagem)
+
+
+def processar_captura(
+    frames: list[dict[str, Any]], *, exigir_movimento: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """
-    Processa de três a cinco quadros vivos e agrega seus embeddings.
+    Agrega três a cinco quadros; cadastro exige a sequência de movimento.
     """
     
     if not isinstance(frames, list) or not 3 <= len(frames) <= 5:
         raise BiometriaErro("Capture de três a cinco quadros da câmera.")
     
-    assinaturas, qualidades = [], []
+    imagens, segmentos, assinaturas, qualidades = [], [], [], []
     formato = None
     
     for indice, frame in enumerate(frames, 1):
@@ -430,13 +481,35 @@ def processar_captura(frames: list[dict[str, Any]]) -> tuple[dict[str, Any], dic
             if formato is not None and rgb.shape != formato:
                 raise BiometriaErro("Todos os quadros devem ter as mesmas dimensões.")
             formato = rgb.shape
-            segmento = segmentacao(pre_processamento(rgb))
-            assinaturas.append(extracao_caracteristicas(segmento))
-            qualidades.append(segmento["qualidade"])
+            imagens.append(rgb)
         except BiometriaErro as exc:
             _registrar_diagnostico(
                 "captura", aceita=False, quadro=indice, motivo=str(exc),
             )
+            raise type(exc)(f"Quadro {indice}: {exc}") from exc
+
+    for indice, rgb in enumerate(imagens, 1):
+        try:
+            segmento = segmentacao(pre_processamento(rgb))
+            segmentos.append(segmento)
+            qualidades.append(segmento["qualidade"])
+        except BiometriaErro as exc:
+            _registrar_diagnostico("captura", aceita=False, quadro=indice, motivo=str(exc))
+            raise type(exc)(f"Quadro {indice}: {exc}") from exc
+
+    if exigir_movimento:
+        for indice, rgb in enumerate(imagens, 1):
+            if any(np.array_equal(rgb, anterior) for anterior in imagens[:indice - 1]):
+                mensagem = "Os quadros repetem a mesma imagem. Refaça a sequência: frente, sua direita e sua esquerda."
+                _registrar_diagnostico("captura", aceita=False, quadro=indice, motivo=mensagem)
+                raise BiometriaErro(f"Quadro {indice}: {mensagem}")
+        _validar_movimento(segmentos)
+
+    for indice, segmento in enumerate(segmentos, 1):
+        try:
+            assinaturas.append(extracao_caracteristicas(segmento))
+        except BiometriaErro as exc:
+            _registrar_diagnostico("captura", aceita=False, quadro=indice, motivo=str(exc))
             raise type(exc)(f"Quadro {indice}: {exc}") from exc
     
     maior_distancia = max(

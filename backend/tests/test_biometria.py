@@ -21,32 +21,40 @@ from app.biometria import (
 )
 
 
-def quadro_sintetico(tipo=0, brilho=0, largura=320, altura=240):
+def quadro_sintetico(tipo=0, brilho=0, largura=320, altura=240, pose=0, variacao=0):
     y, x = np.mgrid[:altura, :largura]
     if tipo == 0:
         textura = 120 + 35 * np.sin(x * 0.47) + 35 * np.cos(y * 0.29)
     else:
-        textura = 120 + 45 * np.sin((x + y) * 0.61) + 25 * np.cos((x - y) * 0.71)
+        textura = 120 + 45 * np.sin((x + y) * 0.31) + 25 * np.cos((x - y) * 0.37)
     cinza = np.clip(textura + brilho, 0, 255).astype(np.uint8)
     rgb = np.repeat(cinza[:, :, None], 3, axis=2)
+    # Marcadores fora da região facial permitem poses reproduzíveis no detector de teste.
+    rgb[0, 0] = [29, 133, round((pose + 0.5) * 200)]
+    rgb[0, 1] = [variacao, 0, 0]
     return {"largura": largura, "altura": altura, "rgb_base64": base64.b64encode(rgb.tobytes()).decode("ascii")}
 
 
+def captura_sintetica(tipo=0, brilho=0, poses=(0, -0.10, 0.10)):
+    return {
+        'frames': [quadro_sintetico(tipo=tipo, brilho=brilho, pose=pose, variacao=indice)
+                   for indice, pose in enumerate(poses, 1)],
+    }
+
+
 def assinatura_sintetica(tipo=0, brilho=0):
-    frame = quadro_sintetico(tipo=tipo, brilho=brilho)
-    return processar_captura([frame] * 3)[0]
+    return processar_captura(captura_sintetica(tipo=tipo, brilho=brilho)['frames'])[0]
 
 
 def test_pipeline_gera_assinatura_json_e_resumo_das_cinco_fases():
-    frame = quadro_sintetico()
-    assinatura, resumo = processar_captura([frame] * 3)
+    assinatura, resumo = processar_captura(captura_sintetica()['frames'])
     assert assinatura["algoritmo"] == ALGORITMO
     assert assinatura["dimensao"] == DIMENSAO == 512
     assert len(assinatura["vetor"]) == DIMENSAO
     assert np.linalg.norm(assinatura["vetor"]) == pytest.approx(1, abs=1e-7)
     assert len(resumo["etapas"]) == 5
     assert len(resumo["qualidade"]) == 3
-    assert resumo["maior_distancia_entre_quadros"] == 0
+    assert resumo["maior_distancia_entre_quadros"] <= 0.25
     serializado = json.dumps({"assinatura": assinatura, "resumo": resumo}, allow_nan=False)
     assert "rgb_base64" not in serializado
     assert "imagem" not in resumo and "mascara" not in resumo
@@ -86,7 +94,7 @@ def test_captura_rejeita_dimensoes_diferentes():
         processar_captura([a, b, a])
 
 
-@pytest.mark.parametrize("nivel,mensagem", [(0, "iluminação"), (255, "iluminação"), (120, "contraste")])
+@pytest.mark.parametrize("nivel,mensagem", [(0, "pouca iluminação"), (255, "iluminação excessiva"), (120, "contraste")])
 def test_qualidade_rejeita_escuro_estourado_e_sem_textura(nivel, mensagem):
     with pytest.raises(BiometriaErro, match=mensagem):
         segmentacao(pre_processamento(np.full((240, 320, 3), nivel, np.uint8)))
@@ -107,9 +115,10 @@ def test_distancia_simetrica_identidade_e_estabilidade_a_brilho():
 
 
 def test_captura_rejeita_texturas_inconsistentes():
-    a, b = quadro_sintetico(), quadro_sintetico(tipo=1)
+    frames = captura_sintetica()['frames']
+    frames[1] = quadro_sintetico(tipo=1, pose=-0.10)
     with pytest.raises(BiometriaErro, match="diferem muito"):
-        processar_captura([a, b, a])
+        processar_captura(frames)
 
 
 def test_classificacao_identifica_e_rejeita_fora_do_limiar():
@@ -135,6 +144,8 @@ def test_classificacao_rejeita_empate_e_base_vazia():
 
 def test_classificacao_aplica_margem_entre_primeiro_e_segundo_candidatos():
     a, b = assinatura_sintetica(), assinatura_sintetica(brilho=15)
+    # Isola a margem entre referências; o veto de um quadro é testado separadamente.
+    a.pop('amostras')
     distancia = comparar_assinaturas(a, b)
     resultado = classificacao_interpretacao(a, [("1", a), ("2", b)], margem=distancia + 0.01)
     assert resultado["motivo"] == "captura_ambigua"

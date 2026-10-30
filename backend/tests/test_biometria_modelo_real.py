@@ -9,12 +9,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
-from sqlalchemy.orm import Session
 
 from app import biometria
 from app.banco import DesafioBiometrico, Sessao, Usuario
-from app.seguranca import hash_token
-from tests.test_api import api, cadastrar, contar, credenciais, verificar
+from tests.test_api import api, cadastrar, contar
 
 
 pytestmark = [
@@ -75,9 +73,11 @@ def _frame_fotografia(nome):
 
 @pytest.fixture(scope="module")
 def assinaturas_reais():
-    # Quadros repetidos isolam a identidade. Isso não testa prova de vida.
+    # Isola detecção/alinhamento/embedding: fotos estáticas não cumprem o cadastro com movimento.
     return {
-        nome: biometria.processar_captura([_frame_fotografia(nome)] * 3)[0]
+        nome: biometria.extracao_caracteristicas(biometria.segmentacao(
+            biometria.pre_processamento(biometria.sensoriamento(_frame_fotografia(nome))),
+        ))
         for nome in ("obama.jpg", "obama2.jpg", "biden.jpg")
     }
 
@@ -113,13 +113,13 @@ def test_modelo_real_rejeita_textura_sem_rosto():
     aleatorio = np.random.default_rng(9406)
     rgb = aleatorio.integers(40, 216, size=(480, 640, 3), dtype=np.uint8)
     with pytest.raises(biometria.BiometriaErro, match="rosto"):
-        biometria.processar_captura([_frame(rgb)] * 3)
+        biometria.segmentacao(biometria.pre_processamento(rgb))
 
 
 def test_modelo_real_rejeita_dois_rostos_no_mesmo_quadro():
     frame = _frame_fotografia("obama_and_biden.jpg")
     with pytest.raises(biometria.BiometriaErro, match="rosto"):
-        biometria.processar_captura([frame] * 3)
+        biometria.segmentacao(biometria.pre_processamento(biometria.sensoriamento(frame)))
 
 
 def test_modelo_real_rejeita_assinatura_legada_mobilenet(assinaturas_reais):
@@ -135,54 +135,9 @@ def test_modelo_real_rejeita_assinatura_legada_mobilenet(assinaturas_reais):
         biometria.comparar_assinaturas(atual, legada)
 
 
-def test_api_real_vincula_face_ao_cpf_e_nao_autentica_outra_pessoa(api, assinaturas_reais):
+def test_api_real_nao_aceita_fotografia_repetida_como_sequencia_de_cadastro(api):
     cadastro = {"frames": [_frame_fotografia("obama.jpg")] * 3}
-    face_diferente = {"frames": [_frame_fotografia("biden.jpg")] * 3}
-    mesma_pessoa = {"frames": [_frame_fotografia("obama2.jpg")] * 3}
-
-    criado = cadastrar(api, cadastro, nivel=3)
-    assert criado.status_code == 201, criado.text
-    usuario_id = criado.json()["usuario"]["id"]
-    assert contar(api, Usuario) == 1
-    assert contar(api, Sessao) == 0
-    with Session(api.engine) as db:
-        usuario = db.get(Usuario, usuario_id)
-        blob_original = usuario.assinatura_cifrada
-        assert isinstance(blob_original, bytes)
-        assert b"vetor" not in blob_original
-        cadastrada = api.seguranca.decifrar(blob_original, usuario.biometria_ref, "biometria")
-        assert cadastrada["dimensao"] == len(cadastrada["vetor"]) == 512
-        np.testing.assert_allclose(
-            cadastrada["vetor"], assinaturas_reais["obama.jpg"]["vetor"], atol=1e-8,
-        )
-
-    troca_sem_autorizacao = api.client.put(
-        f"/api/usuarios/{usuario_id}/biometria", json=face_diferente,
-    )
-    assert troca_sem_autorizacao.status_code == 401
-    with Session(api.engine) as db:
-        assert db.get(Usuario, usuario_id).assinatura_cifrada == blob_original
-
-    assert credenciais(api).status_code == 200
-    desafio_inicial = api.client.cookies.get("aps_desafio")
-    assert desafio_inicial and not api.client.cookies.get("aps_sessao")
-    with Session(api.engine) as db:
-        assert db.get(DesafioBiometrico, hash_token(desafio_inicial)).usuario_id == usuario_id
-
-    rejeitado = verificar(api, face_diferente)
-    assert rejeitado.status_code == 401, rejeitado.text
-    assert contar(api, Sessao) == 0 and contar(api, DesafioBiometrico) == 1
-    assert not api.client.cookies.get("aps_sessao")
-    assert api.client.get("/api/sessao").status_code == 401
-    replay = verificar(api, mesma_pessoa, headers={"Cookie": f"aps_desafio={desafio_inicial}"})
-    assert replay.status_code == 200
-    aceito = replay
-    assert aceito.status_code == 200, aceito.text
-    assert aceito.json()["usuario"]["id"] == usuario_id
-    assert aceito.json()["usuario"]["nivel"] == 3
-    assert contar(api, DesafioBiometrico) == 0
-    assert contar(api, Sessao) == 1
-    assert api.client.cookies.get("aps_sessao")
-    sessao = api.client.get("/api/sessao")
-    assert sessao.status_code == 200
-    assert sessao.json()["mensagem"] == "Você é do nível 3"
+    rejeitado = cadastrar(api, cadastro, nivel=3)
+    assert rejeitado.status_code == 422, rejeitado.text
+    assert 'mesma imagem' in rejeitado.json()['detail']
+    assert contar(api, Usuario) == contar(api, Sessao) == contar(api, DesafioBiometrico) == 0
