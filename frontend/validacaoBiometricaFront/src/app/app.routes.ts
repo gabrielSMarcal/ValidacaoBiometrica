@@ -16,6 +16,12 @@ export const routes: Routes = [
       import('./features/restricted-dashboard/restricted-dashboard').then((m) => m.RestrictedDashboard)
   },
   {
+    path: 'restricted-dashboard/:access',
+    loadComponent: () =>
+      import('./features/restricted-dashboard/restricted-access-page')
+        .then((m) => m.RestrictedAccessPage)
+  },
+  {
     path: 'reconhecimento-facial',
     loadComponent: () =>
       import('./features/reconhecimento-facial/reconhecimento-facial').then((m) => m.ReconhecimentoFacial)

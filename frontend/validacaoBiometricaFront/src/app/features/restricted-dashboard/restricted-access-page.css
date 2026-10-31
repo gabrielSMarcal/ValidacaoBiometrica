@@ -1,0 +1,59 @@
+:host {
+  display: block;
+}
+
+.access-page {
+  width: min(100% - 3rem, 52rem);
+  margin: 4rem auto;
+  padding: 3rem;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 1.25rem 3rem rgba(7, 25, 16, 0.1);
+}
+
+.eyebrow,
+.panel-tag {
+  color: #0f5a3c;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.access-page h1,
+.information-card h2 {
+  color: #0b1f17;
+}
+
+.intro,
+.information-card p,
+.information-card li {
+  color: #31443a;
+  line-height: 1.5;
+}
+
+.information-card {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border: 1px solid #c9d8d0;
+  border-radius: 1rem;
+  background: #f7fbf8;
+}
+
+.information-card h2 {
+  margin-top: 0.25rem;
+}
+
+.information-card .panel-tag {
+  margin: 0;
+}
+
+.back-link {
+  color: #0f5a3c;
+  font-weight: 700;
+}
+
+.back-link:focus-visible {
+  outline: 3px solid #d59b28;
+  outline-offset: 3px;
+}

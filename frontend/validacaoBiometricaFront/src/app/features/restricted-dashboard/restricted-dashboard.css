@@ -25,3 +25,102 @@
   color: #31443a;
   font-size: 1.25rem;
 }
+
+.modules {
+  margin: 2rem 0;
+}
+
+.section-heading h2 {
+  margin: 0.25rem 0;
+  color: #0b1f17;
+}
+
+.section-heading > p:last-child {
+  margin-top: 0.5rem;
+  color: #31443a;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.module-card {
+  display: flex;
+  min-height: 10rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid #c9d8d0;
+  border-radius: 1rem;
+  background: #f7fbf8;
+  color: #0b1f17;
+  text-decoration: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.module-card:hover {
+  border-color: #0f5a3c;
+  box-shadow: 0 0.5rem 1rem rgba(7, 25, 16, 0.1);
+  transform: translateY(-2px);
+}
+
+.module-card:focus-visible {
+  outline: 3px solid #d59b28;
+  outline-offset: 3px;
+}
+
+.module-card__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.module-card__description {
+  flex: 1;
+  color: #31443a;
+  line-height: 1.45;
+}
+
+.module-card__action {
+  color: #0f5a3c;
+  font-weight: 700;
+}
+
+.module-card__action span {
+  margin-left: 0.25rem;
+}
+
+.access-panel {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border: 1px solid #c9d8d0;
+  border-radius: 1rem;
+  background: #f7fbf8;
+}
+
+.access-panel h2 {
+  margin-top: 0.25rem;
+  color: #0b1f17;
+}
+
+.access-panel p,
+.access-panel li {
+  color: #31443a;
+  line-height: 1.5;
+}
+
+.panel-tag {
+  margin: 0;
+  color: #0f5a3c !important;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ministerial-panel {
+  border-color: #b6a36a;
+  background: #fffdf4;
+}

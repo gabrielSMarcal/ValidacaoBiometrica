@@ -1,10 +1,30 @@
 <main class="dashboard" aria-labelledby="dashboard-title">
-  <p class="eyebrow">Área restrita</p>
+  <p class="eyebrow">Cofre ambiental</p>
   <h1 id="dashboard-title">
-    Bem-vindo, {{ auth.currentUser()?.nome }}.
+    Bem-vindo, {{ auth.currentUser()?.nome }}
   </h1>
   <p class="welcome-message">
-    Bem-vindo usuário de nível {{ auth.currentUser()?.nivel }}.
+    {{ accessLabel() }} · nível {{ level() }}
   </p>
+  @if (dashboardAccess().length > 0) {
+    <section class="modules" aria-labelledby="modules-title">
+      <div class="section-heading">
+        <p class="panel-tag">Acessos disponíveis</p>
+        <h2 id="modules-title">Módulos do seu nível</h2>
+        <p>Selecione um módulo para consultar as informações autorizadas para o seu perfil.</p>
+      </div>
+
+      <div class="module-grid">
+        @for (access of dashboardAccess(); track access.path) {
+          <a class="module-card" [routerLink]="['/restricted-dashboard', access.path]">
+            <span class="module-card__title">{{ access.title }}</span>
+            <span class="module-card__description">{{ access.description }}</span>
+            <span class="module-card__action" aria-hidden="true">Acessar módulo <span>→</span></span>
+          </a>
+        }
+      </div>
+    </section>
+  }
+
   <a routerLink="/">Voltar para o início</a>
 </main>
