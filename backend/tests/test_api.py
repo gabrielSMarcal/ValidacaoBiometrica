@@ -17,7 +17,7 @@ from app.banco import Base, DesafioBiometrico, LogAcesso, Sessao, Usuario, agora
 from app.biometria import DIMENSAO
 from app.config import Settings
 from app.seguranca import Seguranca, hash_token
-from tests.test_biometria import quadro_sintetico
+from tests.test_biometria import captura_sintetica
 
 CHAVE_TESTE = base64.urlsafe_b64encode(bytes(range(32))).decode()
 SENHA_TESTE = 'Senha-sintetica-2026!'
@@ -47,12 +47,12 @@ def api(monkeypatch):
 
 @pytest.fixture(scope='module')
 def captura():
-    return {'frames': [quadro_sintetico()] * 3}
+    return captura_sintetica()
 
 
 @pytest.fixture(scope='module')
 def outra_captura():
-    return {'frames': [quadro_sintetico(tipo=1)] * 3}
+    return captura_sintetica(tipo=1)
 
 
 def gerenciar(api, metodo, rota, **kwargs):

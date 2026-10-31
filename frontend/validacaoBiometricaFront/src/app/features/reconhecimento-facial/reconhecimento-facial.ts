@@ -1,12 +1,23 @@
 import { Component, ElementRef, OnDestroy, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { FaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
-import { firstValueFrom } from 'rxjs';
+import { Detection, FaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
+import { Subject, firstValueFrom, takeUntil } from 'rxjs';
 
 import { Frame } from '../../core/models/biometria/biometria.model';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiError } from '../../core/models/validation-error/api-error.model';
 import { UsuarioService } from '../../core/services/usuario.service';
+import {
+  CAPTURE_POLICY, ENROLLMENT_INSTRUCTIONS, SINGLE_FACE_MESSAGE,
+  faceInsideGuide, frameExposureMessage, horizontalPose, illuminationMessage, matchesEnrollmentPose,
+} from './capture-validation';
+
+interface CameraSample {
+  pixels: Uint8ClampedArray;
+  detections: Detection[];
+}
+
+class CaptureCancelled extends Error {}
 
 @Component({
   imports: [RouterLink],
@@ -27,54 +38,72 @@ export class ReconhecimentoFacial implements OnDestroy {
   protected readonly captureCooldown = signal(0);
   protected readonly biometricFailures = signal(0);
   private readonly canvas = document.createElement('canvas');
+  private readonly destroyed$ = new Subject<void>();
   private stream: MediaStream | null = null;
   private faceDetector: FaceDetector | null = null;
   private detectionTimer: ReturnType<typeof setTimeout> | null = null;
   private cooldownTimer: ReturnType<typeof setInterval> | null = null;
+  private captureWait: { timer: ReturnType<typeof setTimeout>; resolve: () => void } | null = null;
   private stableDetections = 0;
+  private captureGeneration = 0;
+  private lastDetectionTimestamp = 0;
+  private destroyed = false;
+  private requiresLogin = false;
   private readonly enrollmentUserId = Number(this.route.snapshot.queryParamMap.get('cadastroId'));
 
   ngOnDestroy(): void {
+    this.destroyed = true;
+    this.destroyed$.next();
+    this.destroyed$.complete();
     this.stopCamera();
-    this.stopCooldown();
   }
 
   async openCamera(): Promise<void> {
-    if (this.cameraState() === 'abrindo' || this.cameraState() === 'detectando' || this.cameraState() === 'capturando') {
+    if (this.destroyed || this.requiresLogin || this.cameraState() === 'abrindo'
+      || this.cameraState() === 'detectando' || this.cameraState() === 'capturando') {
       return;
     }
-
     this.stopCamera();
+    const generation = this.captureGeneration;
     this.cameraState.set('abrindo');
     this.statusMessage.set('Solicitando acesso à câmera…');
     this.errorMessage.set('');
-
     if (!navigator.mediaDevices?.getUserMedia) {
       this.showCameraError('Este navegador não oferece acesso à câmera.');
       return;
     }
-
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
           facingMode: 'user',
-          width: { ideal: 640, max: 640 },
-          height: { ideal: 480, max: 480 },
+          width: { ideal: CAPTURE_POLICY.width, max: CAPTURE_POLICY.width },
+          height: { ideal: CAPTURE_POLICY.height, max: CAPTURE_POLICY.height },
         },
       });
+      if (this.destroyed || generation !== this.captureGeneration) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      this.stream = stream;
       const videoElement = this.video()?.nativeElement;
       if (!videoElement) {
         this.showCameraError('Não foi possível preparar a visualização da câmera.');
         return;
       }
-      videoElement.srcObject = this.stream;
+      videoElement.srcObject = stream;
       await videoElement.play();
+      if (this.destroyed || generation !== this.captureGeneration) {
+        return;
+      }
       this.statusMessage.set('Carregando detector facial…');
       const vision = await FilesetResolver.forVisionTasks(
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm',
       );
-      this.faceDetector = await FaceDetector.createFromOptions(vision, {
+      if (this.destroyed || generation !== this.captureGeneration) {
+        return;
+      }
+      const detector = await FaceDetector.createFromOptions(vision, {
         baseOptions: {
           modelAssetPath:
             'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
@@ -82,73 +111,73 @@ export class ReconhecimentoFacial implements OnDestroy {
         runningMode: 'VIDEO',
         minDetectionConfidence: 0.6,
       });
-      this.cameraState.set('detectando');
-      this.statusMessage.set('Posicione seu rosto dentro do guia e clique em "Fazer captura".');
-      this.scheduleFaceDetection();
-    } catch (error: unknown) {
-      if (this.stream === null) {
-        const message = error instanceof DOMException && error.name === 'NotAllowedError'
-          ? 'Permita o acesso à câmera para realizar o reconhecimento facial.'
-          : 'Não foi possível abrir a câmera. Verifique se ela está disponível e tente novamente.';
-        this.showCameraError(message);
+      if (this.destroyed || generation !== this.captureGeneration) {
+        detector.close();
         return;
       }
-
-      this.cameraState.set('erro');
-      this.statusMessage.set('Detector facial indisponível.');
-      this.errorMessage.set(
-        'Não foi possível carregar o detector facial. Verifique sua conexão e recarregue a página.',
-      );
+      this.faceDetector = detector;
+      this.lastDetectionTimestamp = 0;
+      this.cameraState.set('detectando');
+      this.statusMessage.set('Posicione somente o seu rosto dentro do guia e aguarde a detecção.');
+      this.scheduleFaceDetection();
+    } catch (error: unknown) {
+      if (this.destroyed || generation !== this.captureGeneration) {
+        return;
+      }
+      const message = error instanceof DOMException && error.name === 'NotAllowedError'
+        ? 'Permita o acesso à câmera para realizar o reconhecimento facial.'
+        : this.stream === null
+          ? 'Não foi possível abrir a câmera. Verifique se ela está disponível e tente novamente.'
+          : 'Não foi possível preparar o detector facial. Verifique sua conexão e tente abrir a câmera novamente.';
+      this.showCameraError(message);
     }
   }
 
   async capturarReconhecimento(): Promise<void> {
-    if (this.cameraState() !== 'detectando' || this.captureInProgress() || this.captureCooldown() > 0) {
+    if (this.cameraState() !== 'detectando' || this.captureInProgress()
+      || this.captureCooldown() > 0 || this.requiresLogin || this.destroyed) {
       return;
     }
-
+    if (this.stableDetections < CAPTURE_POLICY.stableSamples) {
+      this.errorMessage.set('Aguarde a detecção de um único rosto bem iluminado dentro do guia antes de fazer a captura.');
+      return;
+    }
+    this.cancelPreviewTimer();
+    const generation = ++this.captureGeneration;
     this.captureInProgress.set(true);
     this.cameraState.set('capturando');
     this.errorMessage.set('');
-    this.statusMessage.set('Capturando quadros. Mantenha o rosto no guia…');
-
     try {
-      const frames: Frame[] = [];
-      for (let index = 0; index < 4; index += 1) {
-        frames.push(this.captureFrame());
-        await this.wait(150);
-      }
-
+      const frames = await this.captureSequence(generation);
+      this.assertCurrentCapture(generation);
+      this.statusMessage.set('Captura concluída. Validando os quadros…');
       if (this.isEnrollment()) {
-        await firstValueFrom(this.usuarioService.atualizarBiometria(this.enrollmentUserId, { frames }));
+        await firstValueFrom(this.usuarioService.atualizarBiometria(this.enrollmentUserId, { frames })
+          .pipe(takeUntil(this.destroyed$)));
+        this.assertCurrentCapture(generation);
         this.stopCamera();
         void this.router.navigateByUrl('/gerenciamento-usuarios');
         return;
       }
-
-      const resposta = await firstValueFrom(this.usuarioService.verificarBiometria({ frames }));
+      const resposta = await firstValueFrom(this.usuarioService.verificarBiometria({ frames })
+        .pipe(takeUntil(this.destroyed$)));
+      this.assertCurrentCapture(generation);
       this.auth.concluirAutenticacao(resposta);
       this.stopCamera();
-      void this.router.navigateByUrl(resposta.usuario.nivel === 4
-        ? '/painel-admin'
-        : '/restricted-dashboard');
+      void this.router.navigateByUrl(resposta.usuario.nivel === 4 ? '/painel-admin' : '/restricted-dashboard');
     } catch (error: unknown) {
-      const failures = this.biometricFailures() + 1;
-      this.biometricFailures.set(failures);
-      if (failures >= 3) {
-        this.stopCamera();
-        this.statusMessage.set('A biometria falhou três vezes. Retornando ao login…');
-        this.errorMessage.set('Por segurança, inicie uma nova autenticação.');
-        void this.router.navigateByUrl('/login');
+      if (error instanceof CaptureCancelled || this.destroyed || generation !== this.captureGeneration) {
         return;
       }
-
-      this.cameraState.set('detectando');
-      this.statusMessage.set(`A captura não foi concluída. Tentativa ${failures} de 3. Aguarde antes de tentar novamente.`);
-      this.errorMessage.set(this.getErrorMessage(error));
+      this.handleCaptureError(error);
     } finally {
-      this.captureInProgress.set(false);
-      this.startCaptureCooldown();
+      if (!this.destroyed && generation === this.captureGeneration) {
+        this.captureInProgress.set(false);
+        if (this.cameraState() === 'detectando') {
+          this.startCaptureCooldown();
+          this.scheduleFaceDetection();
+        }
+      }
     }
   }
 
@@ -156,121 +185,205 @@ export class ReconhecimentoFacial implements OnDestroy {
     void this.capturarReconhecimento();
   }
 
+  private async captureSequence(generation: number): Promise<Frame[]> {
+    const frames: Frame[] = [];
+    let frontalPose: number | null = null;
+    const enrollment = this.isEnrollment();
+    for (let step = 0; step < CAPTURE_POLICY.frameCount; step += 1) {
+      const instruction = enrollment
+        ? ENROLLMENT_INSTRUCTIONS[step]
+        : `Capturando quadro ${step + 1} de 3. Permaneça de frente para a câmera.`;
+      this.statusMessage.set(instruction);
+      const deadline = performance.now() + CAPTURE_POLICY.stepTimeoutMs;
+      let stable = 0;
+      let lastReason = instruction;
+      while (true) {
+        this.assertCurrentCapture(generation);
+        if (performance.now() >= deadline) {
+          throw new Error(`Não foi possível concluir a etapa ${step + 1}. ${lastReason} Reinicie a captura.`);
+        }
+        const sample = this.readCameraSample();
+        const reason = this.sampleProblem(sample);
+        if (reason !== null) {
+          stable = 0;
+          lastReason = reason;
+          this.statusMessage.set(reason);
+          await this.pauseCapture();
+          continue;
+        }
+        const pose = enrollment
+          ? horizontalPose(sample.detections[0], CAPTURE_POLICY.width, CAPTURE_POLICY.height)
+          : null;
+        if (enrollment && !matchesEnrollmentPose(pose, step, frontalPose)) {
+          stable = 0;
+          lastReason = instruction;
+          this.statusMessage.set(`${instruction} Aguardando a posição solicitada.`);
+          await this.pauseCapture();
+          continue;
+        }
+        stable += 1;
+        if (enrollment && stable < CAPTURE_POLICY.stableSamples) {
+          this.statusMessage.set(`${instruction} Mantenha essa posição por um instante.`);
+          await this.pauseCapture();
+          continue;
+        }
+        const frame = this.captureFrame(sample.pixels);
+        if (enrollment && frames.some((previous) => previous.rgb_base64 === frame.rgb_base64)) {
+          stable = 0;
+          lastReason = `${instruction} A imagem continua idêntica à anterior; mova o rosto levemente.`;
+          this.statusMessage.set(lastReason);
+          await this.pauseCapture();
+          continue;
+        }
+        frames.push(frame);
+        if (step === 0) {
+          frontalPose = pose;
+        }
+        break;
+      }
+      await this.pauseCapture();
+    }
+    this.assertCurrentCapture(generation);
+    return frames;
+  }
+
+  private sampleProblem(sample: CameraSample): string | null {
+    if (sample.detections.length > 1) {
+      throw new Error(SINGLE_FACE_MESSAGE);
+    }
+    const face = sample.detections[0]?.boundingBox;
+    if (sample.detections.length !== 1 || !face) {
+      return frameExposureMessage(sample.pixels)
+        ?? 'Nenhum rosto detectado. Posicione o rosto inteiro na câmera e ajuste a iluminação à sua frente.';
+    }
+    if (!faceInsideGuide(face, CAPTURE_POLICY.width, CAPTURE_POLICY.height)) {
+      return 'Centralize o rosto inteiro dentro do guia, mantendo os dois olhos visíveis.';
+    }
+    return illuminationMessage(sample.pixels, CAPTURE_POLICY.width, CAPTURE_POLICY.height, face);
+  }
+
+  private readCameraSample(): CameraSample {
+    const videoElement = this.video()?.nativeElement;
+    if (!videoElement || !this.faceDetector || videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      throw new Error('A câmera ainda não está pronta para capturar uma imagem.');
+    }
+    this.canvas.width = CAPTURE_POLICY.width;
+    this.canvas.height = CAPTURE_POLICY.height;
+    const context = this.canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) {
+      throw new Error('Não foi possível ler os quadros da câmera.');
+    }
+    context.drawImage(videoElement, 0, 0, this.canvas.width, this.canvas.height);
+    const pixels = context.getImageData(0, 0, this.canvas.width, this.canvas.height).data;
+    this.lastDetectionTimestamp = Math.max(performance.now(), this.lastDetectionTimestamp + 1);
+    // Detecta e captura os mesmos pixels, sem uma segunda leitura do vídeo.
+    const result = this.faceDetector.detectForVideo(this.canvas, this.lastDetectionTimestamp);
+    return { pixels, detections: result.detections };
+  }
+
   private scheduleFaceDetection(): void {
-    if (this.detectionTimer !== null || this.cameraState() !== 'detectando') {
+    if (this.detectionTimer !== null || this.cameraState() !== 'detectando' || this.destroyed) {
       return;
     }
     this.detectionTimer = setTimeout(() => {
       this.detectionTimer = null;
-      void this.detectFace();
-    }, 200);
+      this.detectFace();
+    }, CAPTURE_POLICY.sampleIntervalMs);
   }
 
-  private async detectFace(): Promise<void> {
-    if (this.cameraState() !== 'detectando' || !this.faceDetector) {
+  private detectFace(): void {
+    if (this.cameraState() !== 'detectando' || !this.faceDetector || this.destroyed) {
       return;
     }
-
     try {
-      const videoElement = this.video()?.nativeElement;
-      if (!videoElement) {
-        return;
-      }
-      const detections = this.faceDetector.detectForVideo(
-        videoElement,
-        performance.now(),
-      );
-      const face = detections.detections[0]?.boundingBox;
-      if (!face || !this.isFaceInsideGuide(face)) {
+      const sample = this.readCameraSample();
+      const reason = this.sampleProblem(sample);
+      const pose = this.isEnrollment() && reason === null
+        ? horizontalPose(sample.detections[0], CAPTURE_POLICY.width, CAPTURE_POLICY.height)
+        : null;
+      if (reason !== null || (this.isEnrollment() && !matchesEnrollmentPose(pose, 0, null))) {
         this.stableDetections = 0;
-        this.statusMessage.set('Centralize o rosto dentro do guia para iniciar a captura.');
+        this.statusMessage.set(reason ?? ENROLLMENT_INSTRUCTIONS[0]);
       } else {
         this.stableDetections += 1;
-        this.statusMessage.set(
-          this.stableDetections >= 3
-            ? 'Rosto detectado. Clique em "Fazer captura" para continuar.'
-            : 'Rosto detectado. Permaneça imóvel…',
-        );
+        this.statusMessage.set(this.stableDetections >= CAPTURE_POLICY.stableSamples
+          ? 'Um único rosto detectado. Clique em "Fazer captura" para continuar.'
+          : 'Rosto detectado. Aguarde um instante…');
       }
-    } catch {
+    } catch (error: unknown) {
       this.stableDetections = 0;
-      this.errorMessage.set('Não foi possível analisar a imagem da câmera. Tente novamente.');
+      this.statusMessage.set(this.getErrorMessage(error));
     }
-
     this.scheduleFaceDetection();
   }
 
-  private isFaceInsideGuide(face: {
-    originX: number;
-    originY: number;
-    width: number;
-    height: number;
-  }): boolean {
-    const videoElement = this.video()?.nativeElement;
-    if (!videoElement) {
-      return false;
-    }
-    const width = videoElement.videoWidth;
-    const height = videoElement.videoHeight;
-    if (!width || !height) {
-      return false;
-    }
-
-    const centerX = (face.originX + face.width / 2) / width;
-    const centerY = (face.originY + face.height / 2) / height;
-    const faceWidth = face.width / width;
-    const faceHeight = face.height / height;
-    return centerX >= 0.25 && centerX <= 0.75
-      && centerY >= 0.1 && centerY <= 0.9
-      && faceWidth >= 0.2 && faceWidth <= 0.7
-      && faceHeight >= 0.25 && faceHeight <= 0.95;
-  }
-
-  private captureFrame(): Frame {
-    const videoElement = this.video()?.nativeElement;
-    if (!videoElement) {
-      throw new Error('A visualização da câmera não está disponível.');
-    }
-    const largura = 640;
-    const altura = 480;
-    this.canvas.width = largura;
-    this.canvas.height = altura;
-    const context = this.canvas.getContext('2d');
-
-    if (!context || videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      throw new Error('A câmera ainda não está pronta para capturar uma imagem.');
-    }
-
-    context.drawImage(videoElement, 0, 0, largura, altura);
-    const pixels = context.getImageData(0, 0, largura, altura).data;
-    const rgb = new Uint8Array(largura * altura * 3);
-
+  private captureFrame(pixels: Uint8ClampedArray): Frame {
+    const rgb = new Uint8Array(CAPTURE_POLICY.width * CAPTURE_POLICY.height * 3);
     for (let source = 0, target = 0; source < pixels.length; source += 4) {
-      rgb[target] = pixels[source];
-      rgb[target + 1] = pixels[source + 1];
-      rgb[target + 2] = pixels[source + 2];
-      target += 3;
+      rgb[target++] = pixels[source];
+      rgb[target++] = pixels[source + 1];
+      rgb[target++] = pixels[source + 2];
     }
-
     let binary = '';
     const chunkSize = 0x8000;
     for (let index = 0; index < rgb.length; index += chunkSize) {
       binary += String.fromCharCode(...rgb.subarray(index, index + chunkSize));
     }
-
-    return { largura, altura, rgb_base64: btoa(binary) };
+    return { largura: CAPTURE_POLICY.width, altura: CAPTURE_POLICY.height, rgb_base64: btoa(binary) };
   }
 
-  private stopCamera(): void {
+  private handleCaptureError(error: unknown): void {
+    const message = this.getErrorMessage(error);
+    if (this.isApiError(error) && error.status === 401) {
+      const mismatch = !this.isEnrollment() && message.includes('biometria não correspondeu');
+      if (mismatch) {
+        this.biometricFailures.update((count) => count + 1);
+      }
+      if (!mismatch || this.biometricFailures() >= 3) {
+        this.requiresLogin = true;
+        this.stopCamera();
+        this.cameraState.set('erro');
+        this.statusMessage.set('Inicie uma nova autenticação pelo link "Voltar para o login".');
+        this.errorMessage.set(`${message} Volte ao login e confirme CPF e senha novamente.`);
+        return;
+      }
+    }
+    this.stableDetections = 0;
+    this.cameraState.set('detectando');
+    this.statusMessage.set('A captura não foi concluída. Corrija o motivo informado e faça uma nova captura.');
+    this.errorMessage.set(message);
+  }
+
+  private assertCurrentCapture(generation: number): void {
+    if (this.destroyed || generation !== this.captureGeneration || this.cameraState() !== 'capturando') {
+      throw new CaptureCancelled();
+    }
+  }
+
+  private cancelPreviewTimer(): void {
     if (this.detectionTimer !== null) {
       clearTimeout(this.detectionTimer);
       this.detectionTimer = null;
     }
+  }
+
+  private stopCamera(): void {
+    this.captureGeneration += 1;
+    this.cancelPreviewTimer();
+    this.stopCooldown();
+    if (this.captureWait !== null) {
+      clearTimeout(this.captureWait.timer);
+      const resolve = this.captureWait.resolve;
+      this.captureWait = null;
+      resolve();
+    }
+    this.faceDetector?.close();
     this.faceDetector = null;
     this.stableDetections = 0;
+    this.captureInProgress.set(false);
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
-    const videoElement = this.video?.()?.nativeElement;
+    const videoElement = this.video()?.nativeElement;
     if (videoElement) {
       videoElement.srcObject = null;
     }
@@ -295,9 +408,11 @@ export class ReconhecimentoFacial implements OnDestroy {
       clearInterval(this.cooldownTimer);
       this.cooldownTimer = null;
     }
+    this.captureCooldown.set(0);
   }
 
   private showCameraError(message: string): void {
+    this.stopCamera();
     this.cameraState.set('erro');
     this.statusMessage.set('Câmera indisponível.');
     this.errorMessage.set(message);
@@ -305,39 +420,37 @@ export class ReconhecimentoFacial implements OnDestroy {
 
   private getErrorMessage(error: unknown): string {
     if (this.isApiError(error)) {
+      if (error.status === 0) {
+        return 'Não foi possível comunicar com a API. Verifique sua conexão e tente novamente.';
+      }
       if (typeof error.detail === 'string') {
         return error.detail;
       }
-      const validationMessage = Array.isArray(error.detail)
-        ? error.detail
-          .map((item) => item.msg)
-          .filter(Boolean)
-          .join(' ')
-        : '';
+      const validationMessage = error.detail.map((item) => item.msg).filter(Boolean).join(' ');
       if (validationMessage) {
         return validationMessage;
       }
     }
-    if (error instanceof Error) {
-      return error.message;
-    }
-    return 'Não foi possível validar a biometria. Tente novamente.';
+    return error instanceof Error ? error.message : 'Não foi possível validar a biometria. Tente novamente.';
   }
 
   private isEnrollment(): boolean {
     return Number.isInteger(this.enrollmentUserId) && this.enrollmentUserId > 0;
   }
 
-  private isApiError(error: unknown): error is ApiError & {
-    detail: { msg: string }[];
-  } {
-    return typeof error === 'object'
-      && error !== null
-      && 'status' in error
-      && 'detail' in error;
+  private isApiError(error: unknown): error is ApiError {
+    return typeof error === 'object' && error !== null
+      && 'status' in error && typeof error.status === 'number' && 'detail' in error
+      && (typeof error.detail === 'string' || Array.isArray(error.detail));
   }
 
-  private wait(milliseconds: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, milliseconds));
+  private pauseCapture(): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.captureWait = null;
+        resolve();
+      }, CAPTURE_POLICY.sampleIntervalMs);
+      this.captureWait = { timer, resolve };
+    });
   }
 }

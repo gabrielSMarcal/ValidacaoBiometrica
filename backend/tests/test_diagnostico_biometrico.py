@@ -8,7 +8,7 @@ import pytest
 
 import app.biometria as biometria
 from tests.test_api import api, captura, cadastrar, credenciais, verificar
-from tests.test_biometria import quadro_sintetico
+from tests.test_biometria import captura_sintetica, quadro_sintetico
 
 
 LOGGER = 'uvicorn.error.biometria'
@@ -119,31 +119,32 @@ def test_diagnostico_usa_melhor_candidato_sem_expor_identidade_ou_assinatura(cap
 
 
 def test_diagnostico_captura_registra_qualidade_e_consistencia(caplog):
-    frame = quadro_sintetico()
+    frames = captura_sintetica()['frames']
     with caplog.at_level(logging.INFO, logger=LOGGER):
-        assinatura, resumo = biometria.processar_captura([frame] * 3)
+        assinatura, resumo = biometria.processar_captura(frames)
 
-    [diagnostico] = diagnosticos(caplog)
+    [diagnostico] = [item for item in diagnosticos(caplog) if item['evento'] == 'captura']
     assert diagnostico['evento'] == 'captura'
     assert diagnostico['aceita'] is True
     assert diagnostico['motivo'] == 'quadros_consistentes'
     assert diagnostico['qualidade_quadros'] == resumo['qualidade']
     assert len(diagnostico['qualidade_quadros']) == 3
-    assert diagnostico['maior_distancia_entre_quadros'] == 0
+    assert diagnostico['maior_distancia_entre_quadros'] <= diagnostico['limite_consistencia']
     assert diagnostico['limite_consistencia'] == biometria.LIMITE_CONSISTENCIA
     assert set(assinatura) == {'versao', 'algoritmo', 'dimensao', 'vetor', 'amostras'}
     assert 'diagnostico' not in resumo
-    assert frame['rgb_base64'] not in caplog.text
+    assert not any(frame['rgb_base64'] in caplog.text for frame in frames)
     assert '"vetor"' not in caplog.text
 
 
 def test_diagnostico_captura_inconsistente_preserva_rejeicao(caplog):
-    primeiro, diferente = quadro_sintetico(), quadro_sintetico(tipo=1)
+    frames = captura_sintetica()['frames']
+    frames[1] = quadro_sintetico(tipo=1, pose=-0.10)
     with caplog.at_level(logging.INFO, logger=LOGGER):
         with pytest.raises(biometria.BiometriaErro, match='diferem muito'):
-            biometria.processar_captura([primeiro, diferente, primeiro])
+            biometria.processar_captura(frames)
 
-    [diagnostico] = diagnosticos(caplog)
+    [diagnostico] = [item for item in diagnosticos(caplog) if item['evento'] == 'captura']
     assert diagnostico['evento'] == 'captura'
     assert diagnostico['aceita'] is False
     assert diagnostico['motivo'] == 'quadros_inconsistentes'

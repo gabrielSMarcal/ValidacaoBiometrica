@@ -6,6 +6,29 @@ O objetivo principal do projeto é aplicar os estágios do processamento de imag
 
 O backend organiza essas etapas em funções próprias. Os modelos treinados participam da localização do rosto e da extração de suas características; a aplicação coordena a qualidade da captura, a geração da assinatura biométrica e a decisão de autenticação.
 
+## Executar a aplicação
+
+Os dois inicializadores ficam na raiz do repositório:
+
+```powershell
+# Windows
+.\iniciar.bat
+```
+
+```bash
+# Linux
+bash ./iniciar.sh
+```
+
+Antes de executar, inicie o MySQL, configure `backend/.env` e tenha Node.js/npm e um ambiente Python 3.12 funcional. Os scripts priorizam a `.venv` da raiz e reutilizam `backend/.venv` quando necessário; não criam outro ambiente nem duplicam modelos automaticamente. Se ainda não existir nenhum ambiente, crie somente um na raiz com `py -3.12 -m venv .venv` no Windows ou `python3.12 -m venv .venv` no Linux.
+
+Os inicializadores instalam as dependências Python e npm, preparam os modelos e o banco, aguardam a API responder e iniciam o Angular. As portas 8000 e 4200 precisam estar livres. A instalação de dependências e o primeiro download dos modelos exigem internet.
+
+- Front: http://localhost:4200
+- API e Swagger: http://localhost:8000/docs
+
+Mantenha o terminal aberto e use **Ctrl+C** para encerrar os servidores iniciados por ele. No Windows, os logs ficam em `backend/.runtime/api.log`, `api-error.log`, `frontend.log` e `frontend-error.log`; os arquivos são renovados a cada inicialização. No Linux, a API registra em `backend/.runtime/api.log` e a saída do Angular aparece no terminal. Credenciais, chaves e modelos continuam dentro de `backend`.
+
 ## Estágios do processamento
 
 O fluxo é implementado em [backend/app/biometria.py](backend/app/biometria.py).

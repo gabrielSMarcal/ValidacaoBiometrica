@@ -222,7 +222,10 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
     def captura(db, request, dados, evento):
     
         try:
-            return processar_captura([frame.model_dump() for frame in dados.frames])
+            return processar_captura(
+                [frame.model_dump() for frame in dados.frames],
+                exigir_movimento=evento != 'verificacao',
+            )
     
         except BiometriaIndisponivel as exc:
             negar(db, request, evento, 'modelo_indisponivel', 503, str(exc))
@@ -530,6 +533,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         db.refresh(user, with_for_update=True)
         
         if not user.ativo or fingerprint_autorizacao(user) != fingerprint:
+            request.state.preservar_desafio = False
             db.delete(desafio)
             db.commit()
             negar(db, request, 'verificacao', 'desafio_invalidado', mensagem='A autorização mudou. Informe CPF e senha novamente.')

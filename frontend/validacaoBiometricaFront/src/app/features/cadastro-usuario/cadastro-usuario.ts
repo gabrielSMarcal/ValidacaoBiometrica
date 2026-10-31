@@ -17,7 +17,7 @@ export class CadastroUsuario {
     nome: ['', [Validators.required, Validators.minLength(2)]],
     cpf: ['', [Validators.required]],
     senha: ['', [Validators.required, Validators.minLength(8)]],
-    nivel: [1, [Validators.required, Validators.min(1), Validators.max(4)]],
+    nivel: [1, [Validators.required, Validators.min(1), Validators.max(3)]],
   });
   protected readonly statusMessage = signal('Preencha os dados para criar o usuário.');
   protected readonly errorMessage = signal('');
@@ -54,10 +54,34 @@ export class CadastroUsuario {
   }
 
   private getErrorMessage(error: unknown): string {
-    const apiError = error as Partial<ApiError>;
-    return typeof apiError.detail === 'string'
-      ? apiError.detail
-      : 'Não foi possível cadastrar o usuário.';
+    const apiError = typeof error === 'object' && error !== null
+      ? error as Partial<ApiError>
+      : {};
+    if (apiError.status === 0) {
+      return 'Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.';
+    }
+    if (typeof apiError.detail === 'string' && apiError.detail.trim()) {
+      return apiError.detail;
+    }
+    if (Array.isArray(apiError.detail)) {
+      const mensagens = apiError.detail.map((item) => item?.msg).filter(Boolean).join(' ');
+      if (mensagens) {
+        return mensagens;
+      }
+    }
+    if (apiError.status === 401) {
+      return 'Sua sessão expirou. Entre novamente para cadastrar o usuário.';
+    }
+    if (apiError.status === 403) {
+      return 'O cadastro de usuários exige uma sessão de administrador.';
+    }
+    if (apiError.status === 409) {
+      return 'Já existe um usuário com os dados informados. Confira o CPF.';
+    }
+    if (apiError.status === 429) {
+      return 'Muitas tentativas em pouco tempo. Aguarde antes de tentar novamente.';
+    }
+    return 'Não foi possível cadastrar o usuário. Revise os dados e tente novamente.';
   }
 
 }

@@ -3,6 +3,7 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
+import { ApiError } from '../../core/models/validation-error/api-error.model';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
@@ -40,13 +41,34 @@ export class LoginPage {
         this.auth.isAdmin(resposta.usuario) ? '/painel-admin' : '/reconhecimento-facial',
       );
     } catch (error: unknown) {
-      this.errorMessage.set(this.describeError());
+      this.errorMessage.set(this.describeError(error));
     } finally {
       this.submitting.set(false);
     }
   }
 
-  private describeError(): string {
-    return 'Algo deu errado, tente novamente mais tarde.';
+  private describeError(error: unknown): string {
+    const apiError = typeof error === 'object' && error !== null
+      ? error as Partial<ApiError>
+      : {};
+    if (apiError.status === 0) {
+      return 'Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.';
+    }
+    if (typeof apiError.detail === 'string' && apiError.detail.trim()) {
+      return apiError.detail;
+    }
+    if (Array.isArray(apiError.detail)) {
+      const mensagens = apiError.detail.map((item) => item?.msg).filter(Boolean).join(' ');
+      if (mensagens) {
+        return mensagens;
+      }
+    }
+    if (apiError.status === 401) {
+      return 'CPF ou senha inválidos. Confira suas credenciais e tente novamente.';
+    }
+    if (apiError.status === 429) {
+      return 'Muitas tentativas em pouco tempo. Aguarde antes de tentar novamente.';
+    }
+    return 'Não foi possível concluir o acesso. Tente novamente em instantes.';
   }
 }
