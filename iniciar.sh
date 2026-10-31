@@ -49,8 +49,42 @@ if [[ -x "$ROOT/.venv/bin/python" ]] && "$ROOT/.venv/bin/python" --version >/dev
 elif [[ -x "$BACKEND/.venv/bin/python" ]] && "$BACKEND/.venv/bin/python" --version >/dev/null 2>&1; then
     PYTHON="$BACKEND/.venv/bin/python"
 else
-    echo "Ambiente virtual funcional nao encontrado na raiz nem em backend/.venv." >&2
-    echo "Na raiz do projeto, crie um unico ambiente com: python3.12 -m venv .venv" >&2
+    if [[ -e "$ROOT/.venv" || -L "$ROOT/.venv" ]]; then
+        echo "A pasta .venv ja existe, mas seu Python nao funciona neste sistema." >&2
+        echo "Confira o ambiente existente antes de continuar; ele nao foi substituido." >&2
+        exit 1
+    fi
+
+    PYTHON_BASE=""
+    for candidato in python3.12 python3 python; do
+        if command -v "$candidato" >/dev/null 2>&1 \
+            && "$candidato" -c 'import sys, venv, ensurepip; sys.exit(sys.version_info[:2] != (3, 12))' >/dev/null 2>&1; then
+            PYTHON_BASE="$candidato"
+            break
+        fi
+    done
+
+    if [[ -z "$PYTHON_BASE" ]]; then
+        echo "Python 3.12 com os modulos venv e ensurepip nao encontrado." >&2
+        echo "Confira a instalacao do Python e seu acesso pelo PATH." >&2
+        exit 1
+    fi
+
+    echo "Criando o ambiente virtual em $ROOT/.venv com $PYTHON_BASE..."
+    if ! "$PYTHON_BASE" -m venv "$ROOT/.venv"; then
+        echo "Falha ao criar .venv. Confira os modulos venv/ensurepip e as permissoes da pasta." >&2
+        exit 1
+    fi
+    PYTHON="$ROOT/.venv/bin/python"
+    if [[ ! -x "$PYTHON" ]] || ! "$PYTHON" -c 'import sys; sys.exit(sys.prefix == sys.base_prefix)' >/dev/null 2>&1; then
+        echo "A criacao nao produziu um ambiente Python funcional em .venv." >&2
+        exit 1
+    fi
+    echo "Ambiente virtual criado."
+fi
+
+if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
+    echo "O ambiente virtual selecionado nao possui pip funcional. Confira a instalacao do Python." >&2
     exit 1
 fi
 
@@ -148,13 +182,14 @@ fi
 echo "API iniciada: http://127.0.0.1:8000/docs"
 echo "Logs da API: $LOG"
 echo "Iniciando o frontend em http://localhost:4200. Use Ctrl+C para encerrar os dois servidores."
+echo "O navegador abrira automaticamente quando o frontend estiver pronto."
 cd "$FRONTEND"
 # Sessao propria permite encerrar tambem o processo Angular iniciado pelo npm.
 "$PYTHON" - <<'PY' &
 import os
 
 os.setsid()
-os.execvp("npm", ["npm", "start", "--", "--host", "localhost", "--port", "4200"])
+os.execvp("npm", ["npm", "start", "--", "--host", "localhost", "--port", "4200", "--open"])
 PY
 FRONTEND_PID=$!
 while kill -0 "$FRONTEND_PID" 2>/dev/null; do

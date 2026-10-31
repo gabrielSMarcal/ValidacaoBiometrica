@@ -1,13 +1,11 @@
-﻿"""python -m app.inicializar: prepara MySQL sem apagar dados existentes."""
+"""python -m app.inicializar: prepara MySQL sem apagar dados existentes."""
 from uuid import uuid4
 
 from pydantic import ValidationError
 from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from .banco import Base, Usuario, criar_engine, fabrica_sessoes
-from .config import Settings
-from .seguranca import Seguranca
+from .main import Base, Settings, Seguranca, Usuario, criar_engine, fabrica_sessoes
 
 
 def atualizar_esquema(engine):

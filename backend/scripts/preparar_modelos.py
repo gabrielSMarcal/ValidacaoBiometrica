@@ -5,12 +5,12 @@ import sys
 root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root))
 
-from app.modelos_faciais import ModeloFacialIndisponivel, preparar_modelos
+from app.main import ModeloFacialIndisponivel, preparar_modelos
 
 
 def main():
     try:
-        preparar_modelos()
+        preparar_modelos(mostrar_progresso=True)
     except ModeloFacialIndisponivel as exc:
         raise SystemExit(str(exc)) from None
     print('Modelos faciais preparados e verificados.')

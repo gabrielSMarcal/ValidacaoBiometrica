@@ -1,11 +1,11 @@
-﻿"""Gera configuração opcional sem template e sem sobrescrever arquivos existentes."""
+"""Gera configuração opcional sem template e sem sobrescrever arquivos existentes."""
 from pathlib import Path
 import sys
 
 root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root))
 
-from app.config import Settings
+from app.main import Settings
 
 
 def main():

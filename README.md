@@ -1,74 +1,110 @@
 # APS — Processamento de imagens e reconhecimento facial
 
-O objetivo principal do projeto é aplicar os estágios do processamento de imagens à autenticação facial de usuários:
+Autenticação com CPF, senha e verificação facial 1:1. O frontend usa Angular; o backend usa FastAPI, MySQL, YuNet e AuraFace com ONNX Runtime. TensorFlow e Keras não fazem parte da execução atual.
 
-**Aquisição → Pré-processamento → Segmentação → Extração de características → Classificação e interpretação**
+## Executar no Windows
 
-O backend organiza essas etapas em funções próprias. Os modelos treinados participam da localização do rosto e da extração de suas características; a aplicação coordena a qualidade da captura, a geração da assinatura biométrica e a decisão de autenticação.
-
-## Executar a aplicação
-
-Os dois inicializadores ficam na raiz do repositório:
+1. Inicie o MySQL e confira a configuração em `backend/.env`.
+2. Tenha Python 3.12 completo e Node.js/npm compatível com Angular 22 instalados, com as portas 8000 e 4200 disponíveis.
+3. Execute na raiz:
 
 ```powershell
-# Windows
 .\iniciar.bat
 ```
 
-```bash
-# Linux
-bash ./iniciar.sh
-```
+O pacote inclui a `.venv`, um Python 3.12.10 para Windows de 64 bits e os dois modelos. O inicializador Windows ajusta o caminho desse Python se a pasta do projeto mudar. Ambos os inicializadores reutilizam a `.venv` funcional da raiz ou de `backend`; quando não houver ambiente e a pasta `.venv` da raiz estiver ausente, criam-na automaticamente usando o Python 3.12 instalado na máquina. Um ambiente existente inválido é preservado, com uma mensagem para revisão.
 
-Antes de executar, inicie o MySQL, configure `backend/.env` e tenha Node.js/npm e um ambiente Python 3.12 funcional. Os scripts priorizam a `.venv` da raiz e reutilizam `backend/.venv` quando necessário; não criam outro ambiente nem duplicam modelos automaticamente. Se ainda não existir nenhum ambiente, crie somente um na raiz com `py -3.12 -m venv .venv` no Windows ou `python3.12 -m venv .venv` no Linux.
+Depois, instalam as dependências, preparam os modelos e o banco, aguardam a API responder e abrem automaticamente a página no navegador após a compilação do frontend. A instalação Python/npm, o download de modelos ausentes e os recursos MediaPipe carregados pelo navegador exigem internet.
 
-Os inicializadores instalam as dependências Python e npm, preparam os modelos e o banco, aguardam a API responder e iniciam o Angular. As portas 8000 e 4200 precisam estar livres. A instalação de dependências e o primeiro download dos modelos exigem internet.
-
-- Front: http://localhost:4200
+- Aplicação: http://localhost:4200
 - API e Swagger: http://localhost:8000/docs
 
-Mantenha o terminal aberto e use **Ctrl+C** para encerrar os servidores iniciados por ele. No Windows, os logs ficam em `backend/.runtime/api.log`, `api-error.log`, `frontend.log` e `frontend-error.log`; os arquivos são renovados a cada inicialização. No Linux, a API registra em `backend/.runtime/api.log` e a saída do Angular aparece no terminal. Credenciais, chaves e modelos continuam dentro de `backend`.
+Mantenha o terminal aberto e use **Ctrl+C** para encerrar os servidores. Os logs ficam em `backend/.runtime/` e são renovados a cada inicialização.
 
-## Estágios do processamento
+No Linux, execute `bash ./iniciar.sh`. O Python 3.12 deve estar disponível como `python3.12`, `python3` ou `python`, com os módulos `venv` e `ensurepip`; o script cria a `.venv` automaticamente quando ela não existe. Um ambiente Windows não é compatível com Linux: mantenha a `.venv` própria do sistema ou mova a cópia Windows para outro local antes da primeira execução.
 
-O fluxo é implementado em [backend/app/biometria.py](backend/app/biometria.py).
+O MySQL/MariaDB precisa estar instalado e ativo antes da execução; os scripts não instalam o servidor de banco. Copie o `.env` fornecido pela equipe para `backend/.env`, com conexão e administrador inicial configurados. O Node deve atender à faixa do Angular instalado: `^22.22.3 || ^24.15.0 || >=26.0.0`. No Windows, o criador do ambiente procura primeiro `py -3.12` e depois um Python 3.12 disponível no `PATH`.
 
-| Estágio | Funcionamento no backend | Função principal |
+## Configuração do banco e do administrador
+
+Arquivos `.env`, chaves e bancos são locais e não acompanham o ZIP. Se já existe uma configuração da equipe, preserve-a. Em uma instalação nova no Windows, prepare o ambiente antes de usar Python diretamente:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File backend\scripts\iniciar_servidores.ps1 -PrepararPython
+.\.venv\Scripts\python.exe backend\scripts\configurar.py
+```
+
+O configurador cria `backend/.env` sem sobrescrever um arquivo existente. Ajuste:
+
+| Variável | Finalidade |
+| --- | --- |
+| `DB_HOST`, `DB_PORT` | Endereço e porta do MySQL; padrões `127.0.0.1` e `3306`. |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Banco e credenciais de conexão. |
+| `ADMIN_CPF` | CPF válido do administrador inicial. |
+| `ADMIN_PASSWORD_HASH` | Hash Argon2id da senha inicial. |
+| `BIOMETRIC_KEY` | Chave original de 32 bytes em base64 para os dados cifrados. |
+| `ALLOWED_ORIGINS` | Origens web autorizadas; os padrões incluem `http://localhost:4200`. |
+
+Para gerar o hash da senha inicial, execute e cole o resultado em `ADMIN_PASSWORD_HASH`:
+
+```powershell
+.\.venv\Scripts\python.exe -c "from getpass import getpass; from argon2 import PasswordHasher; print(PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2).hash(getpass('Senha inicial do administrador: ')))"
+```
+
+O inicializador cria o banco e as tabelas quando as permissões MySQL permitem; `backend/sql/criar_banco.sql` é a alternativa manual. Um administrador existente mantém sua senha. Alterações conhecidas de estrutura preservam os cadastros existentes.
+
+Uma cópia de um banco existente exige a **mesma chave biométrica**. Quando não houver `BIOMETRIC_KEY` no ambiente ou no `.env`, a chave fica em `backend/.runtime/biometric.key`; preserve esse arquivo ao transferir o banco. Assinaturas de algoritmos anteriores exigem recadastro biométrico.
+
+## Organização do código
+
+`backend/app/main.py` concentra a API, configuração, validação das entradas, persistência, criptografia, preparação dos modelos e coordenação da captura. `backend/app/inicializar.py` é o comando de preparação do banco.
+
+As cinco fases ficam reunidas na pasta `backend/app/processamento/`:
+
+| Fase | Arquivo | Operação |
 | --- | --- | --- |
-| **1. Aquisição** | Recebe de três a cinco quadros RGB enviados pelo cliente, decodifica os bytes e valida formato, dimensões e tamanho da captura. | `sensoriamento()` |
-| **2. Pré-processamento** | Converte os pixels para processamento numérico e aplica suavização binomial para calcular a luminância utilizada na análise de qualidade. Os pixels RGB são preservados para a detecção e o reconhecimento. | `pre_processamento()` |
-| **3. Segmentação** | Localiza a região facial com YuNet, exige um único rosto e verifica enquadramento, iluminação, contraste, saturação e nitidez. Utiliza cinco pontos faciais para alinhar o rosto em uma imagem de 112 × 112 pixels. | `segmentacao()` |
-| **4. Extração de características** | Executa o AuraFace sobre o rosto alinhado e produz um vetor de 512 dimensões, normalizado para a comparação biométrica. | `extracao_caracteristicas()` |
-| **5. Classificação e interpretação** | Calcula a distância de cosseno entre a captura e a assinatura cadastrada, aplica o limiar de aceitação e interpreta o resultado para aceitar ou recusar a identidade apresentada. | `classificacao_interpretacao()` |
+| 1. Aquisição | `sensoriamento.py` | Valida dimensões e decodifica os bytes RGB. |
+| 2. Pré-processamento | `pre_processamento.py` | Aplica suavização binomial e calcula a luminância. |
+| 3. Segmentação | `segmentacao.py` | Detecta um rosto, confere qualidade e alinha cinco pontos faciais em 112 × 112 pixels. |
+| 4. Extração de características | `extracao_caracteristicas.py` | Produz e normaliza o vetor AuraFace de 512 dimensões. |
+| 5. Classificação/interpretação | `classificacao_interpretacao.py` | Compara assinaturas por distância de cosseno e aplica os limites de aceitação. |
 
-A função `processar_captura()` coordena o fluxo, verifica a consistência entre os quadros e gera a assinatura e o resumo das etapas. Na autenticação, a classificação compara a captura com o cadastro vinculado às credenciais confirmadas.
+O cadastro exige três posições: **frente → sua direita → sua esquerda**. O login recebe três quadros diretos. O servidor verifica rosto único, qualidade e consistência entre os quadros; o cadastro também exige movimento e recusa imagens repetidas.
 
-## Papel dos modelos
+Os modelos em `backend/.runtime/modelos` são preservados com tamanho e SHA-256 verificados:
 
-### YuNet: detecção e localização do rosto
+| Modelo | Arquivo | Tamanho |
+| --- | --- | --- |
+| YuNet | `face_detection_yunet_2023mar.onnx` | 232.589 bytes |
+| AuraFace | `glintr100.onnx` | 260.694.151 bytes |
 
-O YuNet identifica a presença de faces e retorna a caixa da região facial, a confiança da detecção e cinco pontos de referência: dois olhos, nariz e dois cantos da boca.
+Os pesos não foram convertidos ou reduzidos. Os limites de comparação permanecem em `0.30`, margem `0.03`, consistência `0.25` e foco mínimo `1.5`. A assinatura mantém versão 3 e algoritmo `auraface-v1-arcface-r100-yunet-112-v3`.
 
-O backend utiliza essas informações para selecionar a região facial e realizar seu alinhamento. Capturas sem rosto, com múltiplos rostos ou com enquadramento inadequado são recusadas. A identificação de qual usuário está diante da câmera ocorre na comparação das características extraídas pelo AuraFace.
+Durante a preparação, o terminal informa o tamanho de cada modelo. Se precisar baixá-lo, mostra os MB recebidos, o total e o percentual de progresso, com aviso de que o download pode demorar. Arquivos já instalados e íntegros são reutilizados; a instalação só é confirmada após a verificação de integridade.
 
-### AuraFace: extração da assinatura facial
+## Endpoints preservados
 
-O AuraFace v1 utiliza uma rede de reconhecimento facial baseada em ArcFace/ResNet100. A partir do rosto alinhado, gera um **embedding de 512 dimensões**: uma representação numérica das características faciais utilizada para comparar identidades.
+| Método | Rota | Uso |
+| --- | --- | --- |
+| `GET` | `/api/saude` | Saúde do banco. |
+| `POST` | `/api/usuarios` | Cadastro administrativo. |
+| `GET` | `/api/usuarios` | Lista administrativa. |
+| `PATCH` | `/api/usuarios/{id}` | Edição administrativa. |
+| `PUT` | `/api/usuarios/{id}/biometria` | Recadastro biométrico administrativo. |
+| `DELETE` | `/api/usuarios/{id}` | Exclusão administrativa. |
+| `POST` | `/api/autenticacao/credenciais` | Confirma CPF e senha. |
+| `POST` | `/api/autenticacao/verificar` | Verificação facial vinculada ao desafio. |
+| `GET` | `/api/sessao` | Consulta da sessão. |
+| `POST` | `/api/sair` | Revoga sessão e desafio. |
 
-Cada quadro produz um vetor normalizado. O backend verifica a consistência dessas amostras e calcula um vetor agregado para o cadastro. Na validação, também verifica cada quadro contra a assinatura cadastrada, impedindo que apenas a média das amostras determine a aceitação de um quadro divergente.
+As chamadas preservam os cookies `HttpOnly`. O desafio biométrico dura 120 segundos; a sessão dura 15 minutos por padrão. O administrador de nível 4 entra com CPF e senha e gerencia usuários de níveis 1 a 3. Os formatos das requisições e respostas permanecem no Swagger.
 
-Os modelos são executados localmente pelo OpenCV e pelo ONNX Runtime. Os arquivos carregados têm tamanho e SHA-256 verificados, e falhas na disponibilidade ou na integridade dos modelos interrompem o processamento biométrico.
+Os quadros são processados em memória. CPF e assinatura são cifrados com AES-GCM; senhas usam Argon2id e tokens são armazenados como hashes. A comparação facial e a sequência de movimento não constituem prova de vida.
 
-## Da assinatura ao armazenamento e à validação
+## Gerar o arquivo de entrega
 
-No cadastro, a assinatura reúne a versão do formato, a identificação do algoritmo, a dimensão, o vetor agregado e as amostras dos quadros. Essa estrutura é serializada em JSON, comprimida e cifrada com AES-GCM antes de ser armazenada em um campo BLOB no MySQL.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\empacotar_projeto.ps1
+```
 
-Na autenticação de um usuário comum, o backend primeiro confirma CPF e senha e emite um desafio temporário vinculado àquele cadastro. Os quadros recebidos na etapa biométrica percorrem o mesmo fluxo de processamento e extração de características. A assinatura armazenada é decifrada e comparada exclusivamente com a captura daquele usuário, em uma **verificação facial 1:1**.
-
-Uma correspondência aceita permite emitir a sessão com o nível do usuário. Capturas incompatíveis são recusadas. O administrador de nível 4 possui o fluxo específico de acesso por CPF e senha, sem validação biométrica.
-
-O resumo retornado pela API apresenta os cinco estágios, as medidas de qualidade e o modelo utilizado, permitindo acompanhar a aplicação do processamento de imagens no projeto.
-
-## Limite do reconhecimento facial
-
-A prova de vida permanece uma verificação adicional ainda pendente. Uma fotografia da própria identidade cadastrada pode ser reconhecida pelo modelo; a comparação de características faciais, por si só, não comprova a presença de uma pessoa viva diante da câmera.
+O resultado fica em `.runtime/entrega/APS-Leitura-Facial.zip`. O script inclui código, documentação, `.venv` e modelos; exclui testes da aplicação, caches, `node_modules`, builds, logs e arquivos privados. Confere a integridade dos modelos e recusa um ZIP acima de **500.000.000 bytes**. O projeto local mantém seus arquivos de configuração e as chaves.

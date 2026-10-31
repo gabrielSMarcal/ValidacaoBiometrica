@@ -1,4 +1,4 @@
-<main class="access-page" aria-labelledby="access-title">
+<main class="page-panel access-page" aria-labelledby="access-title">
   @if (access() && hasAccess()) {
     <p class="eyebrow">Módulo restrito • nível {{ access()?.level }}</p>
     <h1 id="access-title">{{ access()?.title }}</h1>

@@ -33,3 +33,22 @@ button:focus-visible {
   outline: 3px solid rgba(15, 90, 60, 0.28);
   outline-offset: 3px;
 }
+
+.page-panel {
+  width: min(100% - 3rem, var(--panel-width, 52rem));
+  margin: 4rem auto;
+  padding: 3rem;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 1.25rem 3rem rgba(7, 25, 16, 0.1);
+}
+
+.page-panel > .eyebrow {
+  color: #0f5a3c;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.page-panel h1 {
+  color: #0b1f17;
+}

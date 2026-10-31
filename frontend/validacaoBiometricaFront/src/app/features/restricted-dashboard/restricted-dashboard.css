@@ -2,25 +2,6 @@
   display: block;
 }
 
-.dashboard {
-  width: min(100% - 3rem, 52rem);
-  margin: 4rem auto;
-  padding: 3rem;
-  border-radius: 1.5rem;
-  background: #fff;
-  box-shadow: 0 1.25rem 3rem rgba(7, 25, 16, 0.1);
-}
-
-.eyebrow {
-  color: #0f5a3c;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.dashboard h1 {
-  color: #0b1f17;
-}
-
 .welcome-message {
   color: #31443a;
   font-size: 1.25rem;
@@ -92,25 +73,6 @@
   margin-left: 0.25rem;
 }
 
-.access-panel {
-  margin: 2rem 0;
-  padding: 1.5rem;
-  border: 1px solid #c9d8d0;
-  border-radius: 1rem;
-  background: #f7fbf8;
-}
-
-.access-panel h2 {
-  margin-top: 0.25rem;
-  color: #0b1f17;
-}
-
-.access-panel p,
-.access-panel li {
-  color: #31443a;
-  line-height: 1.5;
-}
-
 .panel-tag {
   margin: 0;
   color: #0f5a3c !important;
@@ -118,9 +80,4 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.ministerial-panel {
-  border-color: #b6a36a;
-  background: #fffdf4;
 }

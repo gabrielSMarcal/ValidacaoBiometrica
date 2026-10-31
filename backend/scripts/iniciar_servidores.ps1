@@ -1,6 +1,7 @@
 param(
     [string]$Python,
-    [switch]$VerificarPortas
+    [switch]$VerificarPortas,
+    [switch]$PrepararPython
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,6 +9,22 @@ $Backend = Split-Path -Parent $PSScriptRoot
 $Root = Split-Path -Parent $Backend
 $Frontend = Join-Path $Root 'frontend\validacaoBiometricaFront'
 $Runtime = Join-Path $Backend '.runtime'
+
+if ($PrepararPython) {
+    $ambiente = Join-Path $Root '.venv'
+    $basePython = Join-Path $ambiente 'python312'
+    if (Test-Path -LiteralPath (Join-Path $basePython 'python.exe')) {
+        $configuracao = @(
+            "home = $basePython",
+            'include-system-site-packages = false',
+            'version = 3.12.10',
+            "executable = $basePython\python.exe"
+        ) -join "`r`n"
+        [IO.File]::WriteAllText((Join-Path $ambiente 'pyvenv.cfg'), $configuracao,
+            (New-Object Text.UTF8Encoding($false)))
+    }
+    exit 0
+}
 
 function Assert-FreePort($HostName, $Port) {
     $client = New-Object Net.Sockets.TcpClient
@@ -106,10 +123,10 @@ try {
     Wait-ApiReady -Process $api -ErrorLog $apiError
 
     $front = Start-Server -Executable $env:ComSpec -Directory $Frontend -LogName 'frontend' `
-        -Arguments @('/d', '/c', 'npm.cmd', 'start', '--', '--host', 'localhost', '--port', '4200')
+        -Arguments @('/d', '/c', 'npm.cmd', 'start', '--', '--host', 'localhost', '--port', '4200', '--open')
 
     Write-Host 'API: http://localhost:8000/docs'
-    Write-Host 'Frontend: http://localhost:4200 (aguarde a compilacao)'
+    Write-Host 'Frontend: http://localhost:4200 (abrira no navegador apos a compilacao)'
     Write-Host "Logs: $Runtime"
     Write-Host 'Mantenha este terminal aberto. Pressione Ctrl+C para encerrar os dois servidores.'
 
