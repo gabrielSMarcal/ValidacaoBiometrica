@@ -73,6 +73,8 @@ O cadastro recebe cinco quadros: **frente → um lado → lado oposto → frente
 
 Os dados do novo cadastro ficam somente na memória do frontend durante a captura. Nome, CPF, senha, nível e os cinco quadros são enviados juntos em `POST /api/usuarios`, e o usuário só é salvo após a validação facial. Sair antes do envio descarta os dados. Cadastros antigos sem biometria ficam fora da lista administrativa e podem ser concluídos refazendo o cadastro com o mesmo CPF; um cadastro completo com esse CPF continua sendo recusado.
 
+Durante a captura, a orientação da etapa atual aparece acima do círculo de enquadramento. Após concluir o cadastro, a aplicação retorna ao gerenciamento de usuários e exibe a confirmação de sucesso.
+
 Os modelos em `backend/.runtime/modelos` são preservados com tamanho e SHA-256 verificados:
 
 | Modelo | Arquivo | Tamanho |
@@ -105,28 +107,10 @@ A confirmação de credenciais retorna o nome do usuário para a saudação. Par
 
 Os quadros são processados em memória. CPF e assinatura são cifrados com AES-GCM; senhas usam Argon2id e tokens são armazenados como hashes. A comparação facial e a sequência de movimento não constituem prova de vida.
 
-## Verificar as regressões
-
-Com as dependências já instaladas, execute da raiz:
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
-```
-
-No diretório `frontend/validacaoBiometricaFront`:
-
-```powershell
-node --test tests/capture-validation.test.cjs
-node tests/run-regressions.mjs
-npm run build
-```
-
-Os testes usam banco SQLite isolado e amostras controladas. Não alteram o banco de usuários nem abrem a câmera.
-
 ## Gerar o arquivo de entrega
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\empacotar_projeto.ps1
 ```
 
-O resultado fica em `.runtime/entrega/APS-Leitura-Facial.zip`. O script inclui código, documentação, `.venv` e modelos; exclui testes da aplicação, caches, `node_modules`, builds, logs e arquivos privados. Confere a integridade dos modelos e recusa um ZIP acima de **500.000.000 bytes**. O projeto local mantém seus arquivos de configuração e as chaves.
+O resultado fica em `.runtime/entrega/APS-Leitura-Facial.zip`. O script inclui código, documentação, `.venv` e modelos; exclui caches, `node_modules`, builds, logs e arquivos privados. Confere a integridade dos modelos e recusa um ZIP acima de **500.000.000 bytes**. O projeto local mantém seus arquivos de configuração e as chaves.
