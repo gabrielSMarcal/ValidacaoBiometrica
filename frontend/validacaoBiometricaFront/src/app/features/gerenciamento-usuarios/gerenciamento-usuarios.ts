@@ -33,6 +33,9 @@ export class GerenciamentoUsuarios implements OnInit {
   }
 
   startEditing(user: UsuarioAdministrativo): void {
+    if (user.nivel === 4) {
+      return;
+    }
     this.editingId.set(user.id);
     this.editing.set({ nome: user.nome, nivel: user.nivel, senha: '' });
   }
