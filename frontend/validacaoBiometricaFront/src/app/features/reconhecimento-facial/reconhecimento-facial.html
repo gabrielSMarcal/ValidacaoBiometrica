@@ -1,30 +1,36 @@
 <main class="page-panel face-recognition" aria-labelledby="face-recognition-title">
-  <p class="eyebrow">Segunda etapa de acesso</p>
-  <h1 id="face-recognition-title">Reconhecimento facial</h1>
+  <p class="eyebrow">{{ enrollment ? 'Concluir cadastro' : 'Segunda etapa de acesso' }}</p>
+  <h1 id="face-recognition-title">{{ enrollment ? 'Cadastro facial' : 'Reconhecimento facial' }}</h1>
   <p>
-    Olá, {{ auth.currentUser()?.nome }}. Abra a câmera e faça a captura quando estiver pronto.
+    @if (greetingName()) { Olá, {{ greetingName() }}. } @else { Olá! }
+    Abra a câmera e faça a captura quando estiver pronto.
   </p>
   @if (cameraState() !== 'fechada') {
-    <div class="camera-frame">
-      <video #video autoplay muted playsinline aria-label="Imagem ao vivo da câmera para reconhecimento facial"></video>
-      <div class="face-guide" aria-hidden="true"></div>
+    <div class="camera-session">
+      <div class="camera-instruction" [class.camera-error]="cameraState() === 'erro'"
+           role="status" aria-live="polite" aria-atomic="true">
+        @if (enrollment && captureInProgress() && !validating()) {
+          <span class="capture-progress">Etapa {{ captureStep() + 1 }} de 5</span>
+        }
+        <p class="camera-status">{{ statusMessage() }}</p>
+      </div>
+      <div class="camera-frame">
+        <video #video autoplay muted playsinline aria-label="Imagem ao vivo da câmera para reconhecimento facial"></video>
+        <div class="face-guide" aria-hidden="true"></div>
+      </div>
     </div>
+  } @else {
+    <p class="camera-status" role="status" aria-live="polite">{{ statusMessage() }}</p>
   }
-  <p class="camera-status" [class.camera-error]="cameraState() === 'erro'" role="status" aria-live="polite">
-    {{ statusMessage() }}
-  </p>
-  @if (cameraState() === 'fechada' || cameraState() === 'erro') {
+  @if (!requiresLogin() && (cameraState() === 'fechada' || cameraState() === 'erro')) {
     <button type="button" (click)="openCamera()">
       {{ cameraState() === 'erro' ? 'Tentar abrir a câmera' : 'Abrir câmera' }}
     </button>
   }
-  @if (cameraState() === 'detectando') {
+  @if (!requiresLogin() && cameraState() === 'detectando') {
     <button type="button" [disabled]="captureCooldown() > 0" (click)="confirmarReconhecimento()">
       {{ captureCooldown() > 0 ? 'Aguarde ' + captureCooldown() + 's' : 'Fazer captura' }}
     </button>
-  }
-  @if (captureInProgress()) {
-    <p class="camera-status" role="status" aria-live="polite">Processando captura…</p>
   }
   @if (biometricFailures() > 0 && biometricFailures() < 3) {
     <p class="camera-attempts" role="status" aria-live="polite">
@@ -37,5 +43,11 @@
       <span>{{ errorMessage() }}</span>
     </div>
   }
-  <a routerLink="/login">Voltar para o login</a>
+  @if (requiresLogin()) {
+    <a routerLink="/login">Voltar para o login</a>
+  } @else if (enrollment && !validating()) {
+    <a routerLink="/cadastro-usuario">Cancelar e voltar ao cadastro</a>
+  } @else if (!enrollment) {
+    <a routerLink="/login">Voltar para o login</a>
+  }
 </main>

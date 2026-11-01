@@ -11,9 +11,12 @@ ILUMINACAO_MINIMA = 35
 ILUMINACAO_MAXIMA = 225
 CONTRASTE_MINIMO = 14
 SATURACAO_MAXIMA = 0.55
-POSE_FRONTAL_MAXIMA = 0.12
-POSE_MAXIMA = 0.35
-MOVIMENTO_MINIMO = 0.075
+# YuNet e BlazeFace estimam pontos diferentes. O servidor admite uma margem
+# em relação à pré-validação do navegador, preservando os giros opostos.
+POSE_FRONTAL_MAXIMA = 0.18
+POSE_MAXIMA = 0.55
+MOVIMENTO_MINIMO = 0.04
+RETORNO_FRONTAL_MAXIMO = 0.10
 GUIA = {"x": 0.25, "y": 0.10, "largura": 0.50, "altura": 0.80}
 _PONTOS_ALINHAMENTO = np.array([
     [38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
@@ -149,30 +152,39 @@ def segmentacao(processado: dict[str, np.ndarray] | np.ndarray, detectar_faces) 
 
 
 def _validar_movimento(segmentos: list[dict[str, Any]]) -> None:
-    """Exige poses opostas na sequência; não comprova presença nem prova de vida."""
-    poses = [segmento["pose_horizontal"] for segmento in segmentos]
-    frente, direita, esquerda = poses[:3]
+    """Frente, giros opostos e duas frontais; não constitui prova de vida."""
+    if len(segmentos) != 5:
+        raise BiometriaErro("Conclua as cinco etapas: frente, um lado, outro lado e duas capturas de frente.")
+    poses = [segmento.get("pose_horizontal", float("nan")) for segmento in segmentos]
+    if not all(isinstance(pose, (int, float)) and np.isfinite(pose) for pose in poses):
+        raise BiometriaErro("Não foi possível avaliar a posição do rosto. Mantenha os dois olhos e o nariz visíveis e tente novamente.")
+    frente, primeiro_lado, segundo_lado = poses[:3]
     deslocamentos = [pose - frente for pose in poses]
     mensagem, motivo = None, "sequencia_valida"
     if any(abs(pose) > POSE_MAXIMA for pose in poses):
         mensagem = "Vire a cabeça apenas levemente e mantenha os dois olhos visíveis durante toda a captura."
         motivo = "rotacao_excessiva"
     elif abs(frente) > POSE_FRONTAL_MAXIMA:
-        mensagem = "Comece a sequência olhando de frente para a câmera."
+        mensagem = "Na primeira etapa, olhe de frente com o nariz apontado para a câmera. Reinicie a captura."
         motivo = "primeiro_quadro_nao_frontal"
-    elif direita - frente > -MOVIMENTO_MINIMO:
-        mensagem = "Na segunda captura, vire levemente a cabeça para a sua direita. Refaça toda a sequência."
-        motivo = "movimento_direita_insuficiente"
-    elif esquerda - frente < MOVIMENTO_MINIMO:
-        mensagem = "Na terceira captura, vire levemente a cabeça para a sua esquerda. Refaça toda a sequência."
-        motivo = "movimento_esquerda_insuficiente"
+    elif abs(primeiro_lado - frente) < MOVIMENTO_MINIMO:
+        mensagem = "Na segunda etapa, gire um pouco a cabeça para um dos lados. Apenas deslocar ou inclinar o rosto não é suficiente. Reinicie a captura."
+        motivo = "primeiro_giro_insuficiente"
+    elif (abs(segundo_lado - frente) < MOVIMENTO_MINIMO
+          or (primeiro_lado - frente) * (segundo_lado - frente) >= 0):
+        mensagem = "Na terceira etapa, passe pela posição de frente e gire para o lado oposto ao da segunda etapa. Reinicie a captura."
+        motivo = "giro_oposto_insuficiente"
+    elif any(abs(pose) > POSE_FRONTAL_MAXIMA or abs(pose - frente) > RETORNO_FRONTAL_MAXIMO
+             for pose in poses[3:]):
+        mensagem = "Nas duas últimas etapas, volte a olhar de frente para a câmera e fique parado. Essas imagens serão usadas para reconhecer você. Reinicie a captura."
+        motivo = "retorno_frontal_insuficiente"
 
     _registrar_diagnostico(
         "movimento", aceita=mensagem is None, motivo=motivo,
         poses_horizontais=[round(pose, 6) for pose in poses],
         deslocamentos_horizontais=[round(valor, 6) for valor in deslocamentos],
         limite_frontal=POSE_FRONTAL_MAXIMA, limite_pose=POSE_MAXIMA,
-        movimento_minimo=MOVIMENTO_MINIMO,
+        movimento_minimo=MOVIMENTO_MINIMO, retorno_frontal_maximo=RETORNO_FRONTAL_MAXIMO,
     )
     if mensagem:
         raise BiometriaErro(mensagem)

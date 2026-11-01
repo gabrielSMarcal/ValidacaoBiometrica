@@ -4,20 +4,24 @@ export const CAPTURE_POLICY = {
   width: 640,
   height: 480,
   frameCount: 3,
+  enrollmentFrameCount: 5,
   stableSamples: 3,
   sampleIntervalMs: 200,
-  stepTimeoutMs: 15000,
-  frontalLimit: 0.12,
-  poseLimit: 0.35,
-  minimumTurn: 0.075,
+  stepTimeoutMs: 20000,
+  frontalLimit: 0.14,
+  poseLimit: 0.45,
+  minimumTurn: 0.055,
+  frontalReturnLimit: 0.06,
 } as const;
 
 export const SINGLE_FACE_MESSAGE = 'Deve haver somente uma pessoa na imagem. Afaste as outras pessoas e reinicie a captura.';
 
 export const ENROLLMENT_INSTRUCTIONS = [
-  'Etapa 1 de 3: olhe de frente para a câmera e mantenha o rosto dentro do guia.',
-  'Etapa 2 de 3: vire levemente o rosto para a sua direita, mantendo os dois olhos visíveis.',
-  'Etapa 3 de 3: vire levemente o rosto para a sua esquerda, mantendo os dois olhos visíveis.',
+  'Olhe de frente para a câmera.',
+  'Vire um pouco o rosto para um lado.',
+  'Agora vire o rosto para o outro lado.',
+  'Volte a olhar de frente para a câmera.',
+  'Fique parado por um instante.',
 ] as const;
 
 export type FaceBox = NonNullable<Detection['boundingBox']>;
@@ -42,20 +46,53 @@ export function horizontalPose(detection: Detection, width: number, height: numb
     + (nose.y - (eyes[0].y + eyes[1].y) / 2) * dy) / squaredDistance;
 }
 
-export function matchesEnrollmentPose(pose: number | null, step: number, frontalPose: number | null): boolean {
+export function matchesEnrollmentPose(
+  pose: number | null, step: number, frontalPose: number | null, firstTurnPose: number | null = null,
+): boolean {
   if (pose === null || !Number.isFinite(pose) || Math.abs(pose) > CAPTURE_POLICY.poseLimit) {
     return false;
   }
   if (step === 0) {
     return Math.abs(pose) <= CAPTURE_POLICY.frontalLimit;
   }
-  if (frontalPose === null) {
+  if (frontalPose === null || !Number.isFinite(frontalPose)) {
     return false;
   }
-  // A prévia é espelhada por CSS; os pixels enviados não são espelhados.
-  return step === 1
-    ? pose - frontalPose <= -CAPTURE_POLICY.minimumTurn
-    : step === 2 && pose - frontalPose >= CAPTURE_POLICY.minimumTurn;
+  const turn = pose - frontalPose;
+  if (step === 1) {
+    // O primeiro lado é livre: a prévia espelhada não altera a instrução.
+    return Math.abs(turn) >= CAPTURE_POLICY.minimumTurn;
+  }
+  if (step === 2) {
+    return firstTurnPose !== null && Number.isFinite(firstTurnPose)
+      && Math.abs(firstTurnPose - frontalPose) >= CAPTURE_POLICY.minimumTurn
+      && Math.abs(turn) >= CAPTURE_POLICY.minimumTurn
+      && turn * (firstTurnPose - frontalPose) < 0;
+  }
+  return (step === 3 || step === 4)
+    && Math.abs(pose) <= CAPTURE_POLICY.frontalLimit
+    && Math.abs(turn) <= CAPTURE_POLICY.frontalReturnLimit;
+}
+
+export function enrollmentPoseMessage(
+  pose: number | null, step: number, frontalPose: number | null, firstTurnPose: number | null = null,
+): string {
+  if (pose === null || !Number.isFinite(pose)) {
+    return 'Mantenha os olhos e o nariz visíveis dentro do círculo.';
+  }
+  if (Math.abs(pose) > CAPTURE_POLICY.poseLimit) {
+    return 'Você virou demais. Volte um pouco em direção à câmera.';
+  }
+  if (matchesEnrollmentPose(pose, step, frontalPose, firstTurnPose)) {
+    return 'Posição detectada. Mantenha o rosto assim por um instante.';
+  }
+  if (step === 0 || step >= 3) {
+    return 'Aponte o nariz para a câmera, sem inclinar a cabeça.';
+  }
+  if (step === 1) {
+    return 'Vire um pouco mais o rosto para um lado.';
+  }
+  return 'Passe pelo centro e vire o rosto para o lado oposto.';
 }
 
 export function faceInsideGuide(face: FaceBox, width: number, height: number): boolean {

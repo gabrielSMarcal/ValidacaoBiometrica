@@ -10,12 +10,22 @@ import { UsuarioService } from './usuario.service';
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   readonly currentUser = signal<SessaoResponse['usuario'] | null>(null);
+  readonly pendingUser = signal<AutenticacaoResponse['usuario'] | null>(null);
   readonly authenticating = signal(false);
   private readonly usuarioService = inject(UsuarioService);
 
   autenticarCredenciais(dados: Credenciais): Observable<AutenticacaoResponse> {
     this.authenticating.set(true);
+    this.currentUser.set(null);
+    this.pendingUser.set(null);
     return this.usuarioService.autenticarUsuario(dados).pipe(
+      tap((resposta) => {
+        if (this.isAdmin(resposta.usuario)) {
+          this.currentUser.set(resposta.usuario);
+        } else {
+          this.pendingUser.set(resposta.usuario);
+        }
+      }),
       finalize(() => this.authenticating.set(false)),
     );
   }
@@ -26,6 +36,7 @@ export class AuthService {
 
   concluirAutenticacao(resposta: UsuarioComProcessamentoResponse): void {
     this.currentUser.set(resposta.usuario);
+    this.pendingUser.set(null);
     this.authenticating.set(false);
   }
 
@@ -37,7 +48,10 @@ export class AuthService {
 
   sair(): Observable<{ mensagem: string }> {
     return this.usuarioService.sairSessao().pipe(
-      tap(() => this.currentUser.set(null)),
+      tap(() => {
+        this.currentUser.set(null);
+        this.pendingUser.set(null);
+      }),
     );
   }
 }

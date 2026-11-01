@@ -1,15 +1,16 @@
-import { Component, ElementRef, OnDestroy, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Detection, FaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
 import { Subject, firstValueFrom, takeUntil } from 'rxjs';
 
 import { Frame } from '../../core/models/biometria/biometria.model';
 import { AuthService } from '../../core/services/auth.service';
+import { CadastroPendenteService } from '../../core/services/cadastro-pendente.service';
 import { ApiError } from '../../core/models/validation-error/api-error.model';
 import { UsuarioService } from '../../core/services/usuario.service';
 import {
   CAPTURE_POLICY, ENROLLMENT_INSTRUCTIONS, SINGLE_FACE_MESSAGE,
-  faceInsideGuide, frameExposureMessage, horizontalPose, illuminationMessage, matchesEnrollmentPose,
+  enrollmentPoseMessage, faceInsideGuide, frameExposureMessage, horizontalPose, illuminationMessage, matchesEnrollmentPose,
 } from './capture-validation';
 
 interface CameraSample {
@@ -25,11 +26,20 @@ class CaptureCancelled extends Error {}
   styleUrl: './reconhecimento-facial.css',
   templateUrl: './reconhecimento-facial.html',
 })
-export class ReconhecimentoFacial implements OnDestroy {
+export class ReconhecimentoFacial implements OnInit, OnDestroy {
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly usuarioService = inject(UsuarioService);
+  private readonly cadastroPendente = inject(CadastroPendenteService);
+  protected readonly enrollment = this.route.snapshot.queryParamMap.get('cadastro') === 'novo'
+    || this.route.snapshot.queryParamMap.has('cadastroId');
+  protected readonly greetingName = computed(() => this.enrollment
+    ? this.cadastroPendente.dados()?.nome ?? ''
+    : this.auth.pendingUser()?.nome ?? this.auth.currentUser()?.nome ?? '');
+  protected readonly captureStep = signal(-1);
+  protected readonly validating = signal(false);
+  protected readonly requiresLogin = signal(false);
   protected readonly video = viewChild<ElementRef<HTMLVideoElement>>('video');
   protected readonly cameraState = signal<'fechada' | 'abrindo' | 'detectando' | 'capturando' | 'erro'>('fechada');
   protected readonly statusMessage = signal('Abra a câmera para iniciar a validação facial.');
@@ -48,18 +58,26 @@ export class ReconhecimentoFacial implements OnDestroy {
   private captureGeneration = 0;
   private lastDetectionTimestamp = 0;
   private destroyed = false;
-  private requiresLogin = false;
-  private readonly enrollmentUserId = Number(this.route.snapshot.queryParamMap.get('cadastroId'));
+
+  ngOnInit(): void {
+    if (this.enrollment && !this.cadastroPendente.dados()) {
+      this.requiresLogin.set(true);
+      void this.router.navigateByUrl('/cadastro-usuario');
+    }
+  }
 
   ngOnDestroy(): void {
     this.destroyed = true;
     this.destroyed$.next();
     this.destroyed$.complete();
     this.stopCamera();
+    if (this.enrollment) {
+      this.cadastroPendente.limpar();
+    }
   }
 
   async openCamera(): Promise<void> {
-    if (this.destroyed || this.requiresLogin || this.cameraState() === 'abrindo'
+    if (this.destroyed || this.requiresLogin() || this.cameraState() === 'abrindo'
       || this.cameraState() === 'detectando' || this.cameraState() === 'capturando') {
       return;
     }
@@ -135,7 +153,7 @@ export class ReconhecimentoFacial implements OnDestroy {
 
   async capturarReconhecimento(): Promise<void> {
     if (this.cameraState() !== 'detectando' || this.captureInProgress()
-      || this.captureCooldown() > 0 || this.requiresLogin || this.destroyed) {
+      || this.captureCooldown() > 0 || this.requiresLogin() || this.destroyed) {
       return;
     }
     if (this.stableDetections < CAPTURE_POLICY.stableSamples) {
@@ -150,13 +168,23 @@ export class ReconhecimentoFacial implements OnDestroy {
     try {
       const frames = await this.captureSequence(generation);
       this.assertCurrentCapture(generation);
-      this.statusMessage.set('Captura concluída. Validando os quadros…');
+      this.validating.set(true);
+      this.statusMessage.set(this.enrollment
+        ? 'Validando o rosto e concluindo o cadastro…'
+        : 'Confirmando seu acesso…');
       if (this.isEnrollment()) {
-        await firstValueFrom(this.usuarioService.atualizarBiometria(this.enrollmentUserId, { frames })
+        const dados = this.cadastroPendente.dados();
+        if (!dados) {
+          throw new Error('Os dados do cadastro não estão mais disponíveis. Volte ao cadastro e preencha os dados novamente.');
+        }
+        await firstValueFrom(this.usuarioService.cadastrarUsuario({ ...dados, frames })
           .pipe(takeUntil(this.destroyed$)));
         this.assertCurrentCapture(generation);
+        this.cadastroPendente.limpar();
         this.stopCamera();
-        void this.router.navigateByUrl('/gerenciamento-usuarios');
+        void this.router.navigateByUrl('/gerenciamento-usuarios', {
+          state: { cadastroConcluido: true },
+        });
         return;
       }
       const resposta = await firstValueFrom(this.usuarioService.verificarBiometria({ frames })
@@ -171,6 +199,7 @@ export class ReconhecimentoFacial implements OnDestroy {
       }
       this.handleCaptureError(error);
     } finally {
+      this.validating.set(false);
       if (!this.destroyed && generation === this.captureGeneration) {
         this.captureInProgress.set(false);
         if (this.cameraState() === 'detectando') {
@@ -188,11 +217,14 @@ export class ReconhecimentoFacial implements OnDestroy {
   private async captureSequence(generation: number): Promise<Frame[]> {
     const frames: Frame[] = [];
     let frontalPose: number | null = null;
+    let firstTurnPose: number | null = null;
     const enrollment = this.isEnrollment();
-    for (let step = 0; step < CAPTURE_POLICY.frameCount; step += 1) {
+    const frameCount = enrollment ? CAPTURE_POLICY.enrollmentFrameCount : CAPTURE_POLICY.frameCount;
+    for (let step = 0; step < frameCount; step += 1) {
+      this.captureStep.set(step);
       const instruction = enrollment
         ? ENROLLMENT_INSTRUCTIONS[step]
-        : `Capturando quadro ${step + 1} de 3. Permaneça de frente para a câmera.`;
+        : 'Olhe de frente para a câmera e fique parado por um instante.';
       this.statusMessage.set(instruction);
       const deadline = performance.now() + CAPTURE_POLICY.stepTimeoutMs;
       let stable = 0;
@@ -200,7 +232,7 @@ export class ReconhecimentoFacial implements OnDestroy {
       while (true) {
         this.assertCurrentCapture(generation);
         if (performance.now() >= deadline) {
-          throw new Error(`Não foi possível concluir a etapa ${step + 1}. ${lastReason} Reinicie a captura.`);
+          throw new Error(`O tempo da etapa ${step + 1} terminou. ${lastReason} Clique em "Fazer captura" para tentar novamente.`);
         }
         const sample = this.readCameraSample();
         const reason = this.sampleProblem(sample);
@@ -214,16 +246,16 @@ export class ReconhecimentoFacial implements OnDestroy {
         const pose = enrollment
           ? horizontalPose(sample.detections[0], CAPTURE_POLICY.width, CAPTURE_POLICY.height)
           : null;
-        if (enrollment && !matchesEnrollmentPose(pose, step, frontalPose)) {
+        if (enrollment && !matchesEnrollmentPose(pose, step, frontalPose, firstTurnPose)) {
           stable = 0;
-          lastReason = instruction;
-          this.statusMessage.set(`${instruction} Aguardando a posição solicitada.`);
+          lastReason = enrollmentPoseMessage(pose, step, frontalPose, firstTurnPose);
+          this.statusMessage.set(lastReason);
           await this.pauseCapture();
           continue;
         }
         stable += 1;
         if (enrollment && stable < CAPTURE_POLICY.stableSamples) {
-          this.statusMessage.set(`${instruction} Mantenha essa posição por um instante.`);
+          this.statusMessage.set(instruction);
           await this.pauseCapture();
           continue;
         }
@@ -238,6 +270,8 @@ export class ReconhecimentoFacial implements OnDestroy {
         frames.push(frame);
         if (step === 0) {
           frontalPose = pose;
+        } else if (step === 1) {
+          firstTurnPose = pose;
         }
         break;
       }
@@ -334,13 +368,14 @@ export class ReconhecimentoFacial implements OnDestroy {
 
   private handleCaptureError(error: unknown): void {
     const message = this.getErrorMessage(error);
+    this.captureStep.set(-1);
     if (this.isApiError(error) && error.status === 401) {
       const mismatch = !this.isEnrollment() && message.includes('biometria não correspondeu');
       if (mismatch) {
         this.biometricFailures.update((count) => count + 1);
       }
       if (!mismatch || this.biometricFailures() >= 3) {
-        this.requiresLogin = true;
+        this.requiresLogin.set(true);
         this.stopCamera();
         this.cameraState.set('erro');
         this.statusMessage.set('Inicie uma nova autenticação pelo link "Voltar para o login".');
@@ -435,7 +470,7 @@ export class ReconhecimentoFacial implements OnDestroy {
   }
 
   private isEnrollment(): boolean {
-    return Number.isInteger(this.enrollmentUserId) && this.enrollmentUserId > 0;
+    return this.enrollment;
   }
 
   private isApiError(error: unknown): error is ApiError {

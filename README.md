@@ -69,7 +69,9 @@ As cinco fases ficam reunidas na pasta `backend/app/processamento/`:
 | 4. Extração de características | `extracao_caracteristicas.py` | Produz e normaliza o vetor AuraFace de 512 dimensões. |
 | 5. Classificação/interpretação | `classificacao_interpretacao.py` | Compara assinaturas por distância de cosseno e aplica os limites de aceitação. |
 
-O cadastro exige três posições: **frente → sua direita → sua esquerda**. O login recebe três quadros diretos. O servidor verifica rosto único, qualidade e consistência entre os quadros; o cadastro também exige movimento e recusa imagens repetidas.
+O cadastro recebe cinco quadros: **frente → um lado → lado oposto → frente → frente**. O primeiro lado é livre, sem depender do espelhamento da câmera. Os giros leves servem como barreira contra uma foto estática; a assinatura facial e sua consistência usam somente os três quadros frontais, evitando rejeitar uma pessoa por diferenças entre as poses laterais. O login recebe três quadros de frente. O servidor verifica rosto único, qualidade, movimento no cadastro e imagens repetidas.
+
+Os dados do novo cadastro ficam somente na memória do frontend durante a captura. Nome, CPF, senha, nível e os cinco quadros são enviados juntos em `POST /api/usuarios`, e o usuário só é salvo após a validação facial. Sair antes do envio descarta os dados. Cadastros antigos sem biometria ficam fora da lista administrativa e podem ser concluídos refazendo o cadastro com o mesmo CPF; um cadastro completo com esse CPF continua sendo recusado.
 
 Os modelos em `backend/.runtime/modelos` são preservados com tamanho e SHA-256 verificados:
 
@@ -87,7 +89,7 @@ Durante a preparação, o terminal informa o tamanho de cada modelo. Se precisar
 | Método | Rota | Uso |
 | --- | --- | --- |
 | `GET` | `/api/saude` | Saúde do banco. |
-| `POST` | `/api/usuarios` | Cadastro administrativo. |
+| `POST` | `/api/usuarios` | Cadastro administrativo com cinco quadros obrigatórios. |
 | `GET` | `/api/usuarios` | Lista administrativa. |
 | `PATCH` | `/api/usuarios/{id}` | Edição administrativa. |
 | `PUT` | `/api/usuarios/{id}/biometria` | Recadastro biométrico administrativo. |
@@ -99,7 +101,27 @@ Durante a preparação, o terminal informa o tamanho de cada modelo. Se precisar
 
 As chamadas preservam os cookies `HttpOnly`. O desafio biométrico dura 120 segundos; a sessão dura 15 minutos por padrão. O administrador de nível 4 entra com CPF e senha e gerencia usuários de níveis 1 a 3. Os formatos das requisições e respostas permanecem no Swagger.
 
+A confirmação de credenciais retorna o nome do usuário para a saudação. Para funcionários, isso identifica apenas o desafio pendente: a sessão de acesso só é concedida após a verificação facial.
+
 Os quadros são processados em memória. CPF e assinatura são cifrados com AES-GCM; senhas usam Argon2id e tokens são armazenados como hashes. A comparação facial e a sequência de movimento não constituem prova de vida.
+
+## Verificar as regressões
+
+Com as dependências já instaladas, execute da raiz:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
+```
+
+No diretório `frontend/validacaoBiometricaFront`:
+
+```powershell
+node --test tests/capture-validation.test.cjs
+node tests/run-regressions.mjs
+npm run build
+```
+
+Os testes usam banco SQLite isolado e amostras controladas. Não alteram o banco de usuários nem abrem a câmera.
 
 ## Gerar o arquivo de entrega
 

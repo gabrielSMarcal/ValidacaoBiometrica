@@ -11,5 +11,6 @@ button { padding: .5rem .75rem; border: 1px solid #0f5a3c; border-radius: .5rem;
 button:disabled { cursor: not-allowed; opacity: .55; }
 button.danger { border-color: #a32929; background: #a32929; }
 .error { color: #a32929; font-weight: 700; }
+.success { margin: 1.25rem 0; padding: 1rem 1.25rem; border: 1px solid #b9d9c6; border-radius: .65rem; background: #edf7f0; color: #0f5a3c; font-weight: 600; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgba(15,90,60,.28); outline-offset: 3px; }

@@ -1,7 +1,7 @@
 <main class="page-panel user-page" aria-labelledby="user-create-title">
   <p class="eyebrow">Administração</p>
   <h1 id="user-create-title">Cadastrar usuário</h1>
-  <p>Preencha os dados. Funcionários registrarão a biometria na próxima tela; administradores não precisam desse processo.</p>
+  <p>Preencha os dados e continue para a captura facial. O cadastro só será salvo depois que todas as etapas forem validadas.</p>
 
   <form [formGroup]="form" (ngSubmit)="cadastrar()">
     <label for="nome">Nome</label>
@@ -9,6 +9,9 @@
 
     <label for="cpf">CPF</label>
     <input id="cpf" formControlName="cpf" inputmode="numeric" autocomplete="username">
+    @if (form.controls.cpf.touched && form.controls.cpf.invalid) {
+      <p class="error" role="alert">Informe um CPF válido, com 11 dígitos.</p>
+    }
 
     <label for="senha">Senha</label>
     <input id="senha" type="password" formControlName="senha" autocomplete="new-password">
@@ -25,7 +28,7 @@
       <p class="error" role="alert">{{ errorMessage() }}</p>
     }
     <button type="submit" [disabled]="form.invalid || submitting()">
-      {{ submitting() ? 'Cadastrando…' : 'Cadastrar usuário' }}
+      {{ submitting() ? 'Abrindo captura…' : 'Continuar para captura facial' }}
     </button>
   </form>
   <a routerLink="/painel-admin">Voltar ao painel</a>

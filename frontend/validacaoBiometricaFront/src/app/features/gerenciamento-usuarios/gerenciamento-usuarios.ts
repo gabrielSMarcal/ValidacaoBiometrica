@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { UsuarioAtualizacao } from '../../core/models/usuario/usuario-atualizacao.model';
@@ -14,6 +14,7 @@ import { UsuarioService } from '../../core/services/usuario.service';
   templateUrl: './gerenciamento-usuarios.html',
 })
 export class GerenciamentoUsuarios implements OnInit {
+  protected readonly cadastroConcluido = inject(Router).currentNavigation()?.extras.state?.['cadastroConcluido'] === true;
   protected readonly users = signal<UsuarioAdministrativo[]>([]);
   protected readonly loading = signal(true);
   protected readonly errorMessage = signal('');

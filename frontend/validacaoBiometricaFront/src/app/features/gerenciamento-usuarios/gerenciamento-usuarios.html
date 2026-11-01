@@ -2,6 +2,9 @@
   <p class="eyebrow">Administração</p>
   <h1 id="user-management-title">Gerenciamento de usuários</h1>
   <p>Consulte e administre os usuários cadastrados.</p>
+  @if (cadastroConcluido) {
+    <p class="success" role="status" aria-live="polite">Usuário cadastrado com sucesso.</p>
+  }
   @if (errorMessage()) {
     <p class="error" role="alert">{{ errorMessage() }}</p>
   }

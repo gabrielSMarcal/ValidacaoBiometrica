@@ -107,7 +107,7 @@ class Cadastro(Credenciais, Entrada):
 
     nome: str = Field(min_length=2, max_length=120)
     nivel: Annotated[int, Field(strict=True, ge=1, le=3)]
-    frames: list[Frame] | None = Field(default=None, min_length=3, max_length=5)
+    frames: list[Frame] = Field(min_length=5, max_length=5)
 
     @field_validator('nome')
     @classmethod
@@ -659,11 +659,16 @@ def processar_captura(
     frames: list[dict[str, Any]], *, exigir_movimento: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
-    Agrega três a cinco quadros; cadastro exige a sequência de movimento.
+    Cadastro: cinco quadros, com movimento e três amostras frontais.
+    Login: três a cinco amostras frontais, sem a sequência de movimento.
     """
 
     if not isinstance(frames, list) or not 3 <= len(frames) <= 5:
         raise BiometriaErro("Capture de três a cinco quadros da câmera.")
+    if exigir_movimento and len(frames) != 5:
+        raise BiometriaErro(
+            "Refaça a captura completa: olhe de frente, vire levemente para cada lado e volte a olhar para a câmera."
+        )
 
     imagens, segmentos, assinaturas, qualidades = [], [], [], []
     formato = None
@@ -693,17 +698,20 @@ def processar_captura(
     if exigir_movimento:
         for indice, rgb in enumerate(imagens, 1):
             if any(np.array_equal(rgb, anterior) for anterior in imagens[:indice - 1]):
-                mensagem = "Os quadros repetem a mesma imagem. Refaça a sequência: frente, sua direita e sua esquerda."
+                mensagem = "Os quadros repetem a mesma imagem. Refaça a captura: frente, um lado, outro lado e de volta para a câmera."
                 _registrar_diagnostico("captura", aceita=False, quadro=indice, motivo=mensagem)
                 raise BiometriaErro(f"Quadro {indice}: {mensagem}")
         _validar_movimento(segmentos)
 
-    for indice, segmento in enumerate(segmentos, 1):
+    # As laterais servem apenas para conferir movimento. Comparar essas poses
+    # com as frontais prejudica a consistência e a assinatura de uma pessoa real.
+    indices_assinatura = [0, 3, 4] if exigir_movimento else list(range(len(segmentos)))
+    for indice in indices_assinatura:
         try:
-            assinaturas.append(extracao_caracteristicas(segmento))
+            assinaturas.append(extracao_caracteristicas(segmentos[indice]))
         except BiometriaErro as exc:
-            _registrar_diagnostico("captura", aceita=False, quadro=indice, motivo=str(exc))
-            raise type(exc)(f"Quadro {indice}: {exc}") from exc
+            _registrar_diagnostico("captura", aceita=False, quadro=indice + 1, motivo=str(exc))
+            raise type(exc)(f"Quadro {indice + 1}: {exc}") from exc
 
     maior_distancia = max(
         comparar_assinaturas(a, b)
@@ -719,7 +727,9 @@ def processar_captura(
     )
 
     if maior_distancia > LIMITE_CONSISTENCIA:
-        raise BiometriaErro("Os quadros diferem muito. Mantenha o rosto no guia durante a captura.")
+        raise BiometriaErro(
+            "As imagens de frente não ficaram consistentes. Ao voltar para a câmera, pare o movimento e mantenha o rosto iluminado até concluir a captura."
+        )
 
     assinatura = _criar_assinatura(np.mean([item["vetor"] for item in assinaturas], axis=0))
     assinatura["amostras"] = [item["vetor"] for item in assinaturas]
@@ -733,6 +743,7 @@ def processar_captura(
             {"fase": "Classificação/interpretação", "descricao": "Comparação facial 1:1 por distância de cosseno."},
         ],
         "quadros": len(frames), "qualidade": qualidades,
+        "quadros_assinatura": [indice + 1 for indice in indices_assinatura],
         "modelo": "AuraFace v1 / ArcFace ResNet100 / ONNX Runtime", "algoritmo": ALGORITMO,
         "maior_distancia_entre_quadros": round(maior_distancia, 6),
         "limite_consistencia_experimental": LIMITE_CONSISTENCIA,
@@ -1071,24 +1082,33 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
 
         cpf_indice = seguranca.indice_cpf(dados.cpf)
 
-        if db.scalar(select(Usuario.id).where(Usuario.cpf_indice == cpf_indice)):
-            negar(db, request, 'cadastro', 'cpf_duplicado', 409, 'CPF já cadastrado.')
-        if dados.frames is None:
-            sig, processamento = None, {'etapas': [], 'quadros': 0}
-        else:
-            sig, processamento = captura(db, request, dados, 'cadastro')
-        referencia = str(uuid4())
+        existente = db.scalar(select(Usuario).where(Usuario.cpf_indice == cpf_indice))
 
-        user = Usuario(biometria_ref=referencia, nome=dados.nome, cpf_indice=cpf_indice,
-                       cpf_cifrado=seguranca.cifrar({'cpf': dados.cpf}, referencia, 'cpf'),
-                       senha_hash=seguranca.senhas.hash(dados.senha), nivel=dados.nivel,
-                       assinatura_cifrada=(
-                           seguranca.cifrar(sig, referencia, 'biometria')
-                           if sig is not None else None
-                       ))
+        if existente and (existente.nivel == 4 or existente.assinatura_cifrada is not None):
+            negar(db, request, 'cadastro', 'cpf_duplicado', 409, 'CPF já cadastrado.')
+        # Nenhum dado do usuário é persistido antes da captura ser aprovada.
+        # Cadastros incompletos de versões anteriores podem ser retomados pelo CPF.
+        sig, processamento = captura(db, request, dados, 'cadastro')
+        if existente:
+            # Outra captura pode ter concluído o mesmo cadastro enquanto os
+            # modelos processavam estes quadros. Preserve o primeiro sucesso.
+            db.refresh(existente, with_for_update=True)
+            if existente.nivel == 4 or existente.assinatura_cifrada is not None:
+                negar(db, request, 'cadastro', 'cpf_duplicado', 409, 'CPF já cadastrado.')
+        referencia = existente.biometria_ref if existente else str(uuid4())
+        user = existente if existente else Usuario(biometria_ref=referencia, cpf_indice=cpf_indice)
+        user.nome = dados.nome
+        user.cpf_cifrado = seguranca.cifrar({'cpf': dados.cpf}, referencia, 'cpf')
+        user.senha_hash = seguranca.senhas.hash(dados.senha)
+        user.nivel = dados.nivel
+        user.ativo = True
+        user.assinatura_cifrada = seguranca.cifrar(sig, referencia, 'biometria')
 
         try:
             db.add(user)
+            if existente:
+                db.execute(delete(Sessao).where(Sessao.usuario_id == user.id))
+                db.execute(delete(DesafioBiometrico).where(DesafioBiometrico.usuario_id == user.id))
             db.flush()
             log(db, request, 'cadastro', True, 'cadastrado', user.id)
             db.commit()
@@ -1102,7 +1122,9 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
     @app.get('/api/usuarios', tags=['Usuários'], dependencies=[Depends(administrador)])
     def listar_usuarios(db=Depends(banco)):
 
-        usuarios = db.scalars(select(Usuario).order_by(Usuario.id)).all()
+        usuarios = db.scalars(select(Usuario).where(
+            (Usuario.nivel == 4) | Usuario.assinatura_cifrada.is_not(None)
+        ).order_by(Usuario.id)).all()
 
         return {'usuarios': [publico_administrativo(user) for user in usuarios]}
 
@@ -1193,6 +1215,10 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
                     'expira_em_segundos': settings.session_minutes * 60,
                     'usuario': publico(user)}
 
+        if user.assinatura_cifrada is None:
+            negar(db, request, 'credenciais', 'cadastro_incompleto', 403,
+                  'O cadastro facial deste usuário não foi concluído. Peça ao administrador para refazer o cadastro.', user.id)
+
         token = secrets.token_urlsafe(32)
         db.execute(delete(DesafioBiometrico).where(DesafioBiometrico.expira_em <= agora()))
         db.add(DesafioBiometrico(token_hash=hash_token(token), usuario_id=user.id,
@@ -1205,7 +1231,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
                             httponly=True, secure=settings.cookie_secure, samesite='strict', path='/')
 
         return {'mensagem': 'CPF e senha confirmados. Continue com a biometria.',
-                'expira_em_segundos': DESAFIO_SEGUNDOS}
+                'expira_em_segundos': DESAFIO_SEGUNDOS, 'usuario': publico(user)}
 
     @app.post('/api/autenticacao/verificar', tags=['Autenticação'])
     def verificar(dados: Captura, request: Request, response: Response, db=Depends(banco)):

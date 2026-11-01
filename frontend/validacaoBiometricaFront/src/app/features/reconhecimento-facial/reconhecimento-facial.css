@@ -8,12 +8,46 @@
   line-height: 1.5;
 }
 
+.camera-session {
+  width: min(100%, 40rem);
+  margin: 1.5rem auto 1rem;
+}
+
+.camera-instruction {
+  display: flex;
+  min-height: 5rem;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d7e5dc;
+  border-bottom: 0;
+  border-radius: 1rem 1rem 0 0;
+  background: #eff6f2;
+  color: #0f5a3c;
+  text-align: center;
+}
+
+.capture-progress {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.face-recognition .camera-instruction .camera-status {
+  margin: 0;
+  color: inherit;
+  font-size: 1.125rem !important;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .camera-frame {
   position: relative;
-  width: min(100%, 40rem);
-  margin: 2rem auto 1rem;
+  width: 100%;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 0 0 1rem 1rem;
   background: #0b1f17;
   aspect-ratio: 4 / 3;
 }
