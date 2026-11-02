@@ -1,7 +1,4 @@
-"""Aplicação principal: configuração, persistência, segurança, modelos e API.
-
-O processamento de imagens permanece explícito nos cinco módulos de fases.
-"""
+"""Aplicação principal: configuração, persistência, segurança, modelos e API."""
 from __future__ import annotations
 
 import base64
