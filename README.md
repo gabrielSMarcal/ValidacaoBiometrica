@@ -111,16 +111,6 @@ A confirmação de credenciais retorna o nome do usuário para a saudação. Par
 
 Os quadros são processados em memória. CPF e assinatura são cifrados com AES-GCM; senhas usam Argon2id e tokens são armazenados como hashes. A comparação facial e a sequência de movimento não constituem prova de vida.
 
-## Verificar a normalização de iluminação
-
-Na raiz do projeto, execute os testes do backend com o ambiente preparado:
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
-```
-
-Os testes automatizados verificam o comportamento do processamento. O ganho na precisão biométrica precisa ser avaliado com capturas reais da mesma pessoa sob diferentes luzes e de pessoas diferentes, comparando recusas e aceitações incorretas com o processamento anterior.
-
 ## Gerar o arquivo de entrega
 
 ```powershell

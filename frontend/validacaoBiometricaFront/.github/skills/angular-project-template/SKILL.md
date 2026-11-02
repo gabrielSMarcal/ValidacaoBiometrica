@@ -14,7 +14,7 @@ description: 'Use when generating or updating Angular code in this repository. F
 - Feature goal and expected user flow.
 - Files or route area to update.
 - Data sources, state shape, and validation rules.
-- Accessibility, testing, and UX constraints.
+- Accessibility and UX constraints.
 
 ## Workflow
 1. Inspect the existing structure under `src/app`.
@@ -23,7 +23,6 @@ description: 'Use when generating or updating Angular code in this repository. F
 4. Model local state with signals and derived state with `computed()`.
 5. Use native control flow in templates (`@if`, `@for`, `@switch`).
 6. Keep feature routes lazy-loaded when adding new areas.
-7. Add or update tests for any behavior change.
 
 ## Rules
 - Do not add NgModules for new code.
@@ -35,5 +34,4 @@ description: 'Use when generating or updating Angular code in this repository. F
 
 ## Output
 - Updated Angular source files.
-- Matching test updates when behavior changes.
 - A short summary of what changed and why.
