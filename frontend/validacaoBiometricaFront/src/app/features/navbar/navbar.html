@@ -1,6 +1,6 @@
 <header class="navbar">
   <div class="navbar-inner">
-    <a class="brand" href="#top" (click)="closeMenu()">
+    <a class="brand" routerLink="/" fragment="top" (click)="closeMenu()">
       <span class="brand-mark" aria-hidden="true">
         <svg viewBox="0 0 32 32">
           <path d="M7 25C6 15 12 7 26 6c1 13-6 20-19 19Z" />
@@ -14,8 +14,8 @@
     </a>
 
     <nav class="desktop-nav" aria-label="Principal">
-      @for (link of links; track link.href) {
-        <a [href]="link.href">{{ link.label }}</a>
+      @for (link of links; track link.fragment) {
+        <a routerLink="/" [fragment]="link.fragment">{{ link.label }}</a>
       }
       <a class="nav-restricted" routerLink="/login" (click)="closeMenu()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
@@ -43,8 +43,8 @@
 
   @if (menuOpen()) {
     <nav id="mobile-navigation" class="mobile-nav" aria-label="Menu móvel">
-      @for (link of links; track link.href) {
-        <a [href]="link.href" (click)="closeMenu()">{{ link.label }}</a>
+      @for (link of links; track link.fragment) {
+        <a routerLink="/" [fragment]="link.fragment" (click)="closeMenu()">{{ link.label }}</a>
       }
       <a class="nav-restricted" routerLink="/login" (click)="closeMenu()">Área Restrita</a>
     </nav>

@@ -11,10 +11,10 @@ export class Navbar {
   readonly menuOpen = signal(false);
 
   protected readonly links = [
-    { label: 'Sobre', href: '#sobre' },
-    { label: 'Prioridades', href: '#prioridades' },
-    { label: 'Serviços', href: '#servicos' },
-    { label: 'Participação', href: '#participacao' }
+    { label: 'Sobre', fragment: 'sobre' },
+    { label: 'Prioridades', fragment: 'prioridades' },
+    { label: 'Serviços', fragment: 'servicos' },
+    { label: 'Participação', fragment: 'participacao' }
   ];
 
   protected toggleMenu(): void {

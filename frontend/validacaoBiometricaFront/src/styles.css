@@ -198,3 +198,107 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Cofre de dossiês: cor de destaque por nível (compartilhada pelo painel e pelo detalhe). */
+.level-scope {
+  --level-color: var(--color-primary);
+  --level-soft: var(--color-primary-soft);
+  --level-accent: var(--color-primary);
+}
+
+.level-scope[data-level="2"] {
+  --level-color: var(--color-green);
+  --level-soft: var(--color-green-soft);
+  --level-accent: var(--color-green);
+}
+
+.level-scope[data-level="3"] {
+  --level-color: var(--color-navy);
+  --level-soft: #e6eaf1;
+  --level-accent: var(--color-gold);
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.625rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-chip::before {
+  content: "";
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-chip[data-tone="alerta"] {
+  background: var(--color-warning-soft);
+  color: #6b4a00;
+}
+
+.status-chip[data-tone="concluido"] {
+  background: var(--color-green-soft);
+  color: var(--color-green);
+}
+
+.status-chip[data-tone="reservado"] {
+  background: #e6eaf1;
+  color: var(--color-navy);
+}
+
+.state-card {
+  margin: 0 0 2rem;
+  padding: 2.5rem;
+  border: 1px solid var(--color-border);
+  border-top: 4px solid var(--color-primary);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  text-align: center;
+}
+
+.state-card.is-denied {
+  border-top-color: var(--color-danger);
+}
+
+.state-card h1,
+.state-card h2 {
+  margin: 0 0 0.75rem;
+  color: var(--color-navy);
+}
+
+.state-card p {
+  max-width: 40rem;
+  margin: 0 auto;
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+.state-card .state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.state-card .state-actions a,
+.state-card .state-actions button {
+  min-height: 2.75rem;
+  padding: 0.625rem 1.5rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}

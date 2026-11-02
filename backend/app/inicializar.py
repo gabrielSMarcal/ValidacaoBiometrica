@@ -5,7 +5,9 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from .main import Base, Settings, Seguranca, Usuario, criar_engine, fabrica_sessoes
+from .dossies_demo import DOSSIES_DEMONSTRATIVOS
+from .main import (Base, Dossie, DossieRecorte, DossieRegistro, Settings, Seguranca, Usuario,
+                   criar_engine, fabrica_sessoes)
 
 
 def atualizar_esquema(engine):
@@ -78,6 +80,49 @@ def codigo_mysql(exc):
     return getattr(getattr(exc, 'orig', None), 'args', (None,))[0]
 
 
+def garantir_dossies(engine, dossies=DOSSIES_DEMONSTRATIVOS):
+    """Insere os dossiês demonstrativos ausentes; dossiês existentes são preservados."""
+    sessions = fabrica_sessoes(engine)
+    criados = 0
+    with sessions() as db:
+        existentes = set(db.scalars(select(Dossie.codigo)))
+        for dados in dossies:
+            if dados['codigo'] in existentes:
+                continue
+            dossie = Dossie(codigo=dados['codigo'], titulo=dados['titulo'], situacao=dados['situacao'],
+                            divisao=dados['divisao'], atualizado_em=dados['atualizado_em'])
+            db.add(dossie)
+            db.flush()
+            for nivel, recorte_dados in sorted(dados['recortes'].items()):
+                recorte = DossieRecorte(dossie_id=dossie.id, nivel=nivel, resumo=recorte_dados['resumo'],
+                                        orientacao=recorte_dados['orientacao'])
+                db.add(recorte)
+                db.flush()
+                registros = [
+                    *(DossieRegistro(tipo='campo', titulo=rotulo, descricao=valor)
+                      for rotulo, valor in recorte_dados.get('campos', [])),
+                    *(DossieRegistro(tipo='pendencia', titulo=titulo, descricao=descricao, data=prazo,
+                                     situacao=situacao)
+                      for titulo, descricao, prazo, situacao in recorte_dados.get('pendencias', [])),
+                    *(DossieRegistro(tipo='decisao', titulo=titulo, descricao=descricao, data=prazo,
+                                     situacao=situacao)
+                      for titulo, descricao, prazo, situacao in recorte_dados.get('decisoes', [])),
+                    *(DossieRegistro(tipo='historico', titulo=descricao, data=quando)
+                      for quando, descricao in recorte_dados.get('historico', [])),
+                ]
+                for ordem, registro in enumerate(registros):
+                    registro.recorte_id = recorte.id
+                    registro.ordem = ordem
+                    db.add(registro)
+            criados += 1
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()  # Outra inicialização simultânea inseriu os mesmos códigos.
+            return 0
+    return criados
+
+
 def preparar_banco(settings):
     engine = criar_engine(settings)
     try:
@@ -100,6 +145,7 @@ def preparar_banco(settings):
         Base.metadata.create_all(engine)
         atualizar_esquema(engine)
         garantir_administrador(engine, settings)
+        garantir_dossies(engine)
     finally:
         engine.dispose()
 

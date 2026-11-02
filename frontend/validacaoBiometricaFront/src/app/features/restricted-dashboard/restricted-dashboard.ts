@@ -1,13 +1,24 @@
-import { Component, OnInit, computed, inject } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { EMPTY, catchError } from 'rxjs';
 
+import { DossieResumo } from '../../core/models/dossie/dossie.model';
+import { ApiError } from '../../core/models/validation-error/api-error.model';
 import { AuthService } from '../../core/services/auth.service';
+import {
+  DossieService,
+  formatarData,
+  plural,
+  rotuloNivel,
+  tomSituacao,
+} from '../../core/services/dossie.service';
 
-interface DashboardAccess {
-  title: string;
-  description: string;
-  path: string;
+type EstadoPainel = 'carregando' | 'pronto' | 'sessao' | 'administrador' | 'erro';
+
+interface Indicador {
+  rotulo: string;
+  valor: string;
+  detalhe: string;
 }
 
 @Component({
@@ -18,76 +29,51 @@ interface DashboardAccess {
 })
 export class RestrictedDashboard implements OnInit {
   protected readonly auth = inject(AuthService);
-  protected readonly level = computed(() => this.auth.currentUser()?.nivel ?? 0);
-  protected readonly dashboardAccess = computed<DashboardAccess[]>(() => {
-    const accessesByLevel: Record<number, DashboardAccess[]> = {
-      1: [
-        {
-          title: 'Alertas ambientais gerais',
-          description: 'Consulte alertas e ocorrências ambientais em acompanhamento.',
-          path: 'alertas-ambientais-gerais',
-        },
-        {
-          title: 'Classificação pública de risco das toxinas',
-          description: 'Veja classificações públicas e não operacionais de risco.',
-          path: 'classificacao-publica-de-risco',
-        },
-        {
-          title: 'Comunicados e orientações gerais',
-          description: 'Acesse comunicados oficiais e orientações para a população.',
-          path: 'comunicados-e-orientacoes',
-        },
-      ],
-      2: [
-        {
-          title: 'Registros administrativos de incidentes da toxina',
-          description: 'Acompanhe registros, responsáveis e prazos administrativos.',
-          path: 'registros-administrativos-de-incidentes',
-        },
-        {
-          title: 'Status de conformidade das toxinas',
-          description: 'Monitore pendências, revisões e indicadores de conformidade.',
-          path: 'status-de-conformidade',
-        },
-        {
-          title: 'Coordenação de equipes autorizadas',
-          description: 'Coordene equipes autorizadas e acompanhe suas atribuições.',
-          path: 'coordenacao-de-equipes-autorizadas',
-        },
-      ],
-      3: [
-        {
-          title: 'Briefing estratégico para decisões ministeriais',
-          description: 'Consulte informações estratégicas para decisões ministeriais.',
-          path: 'briefing-estrategico',
-        },
-        {
-          title: 'Impactos em saúde pública e ecossistemas',
-          description: 'Avalie impactos consolidados em saúde pública e ecossistemas.',
-          path: 'impactos-em-saude-publica-e-ecossistemas',
-        },
-        {
-          title: 'Orçamento, transparência e comunicação de crise',
-          description: 'Acompanhe orçamento, transparência e comunicação institucional.',
-          path: 'orcamento-transparencia-e-comunicacao-de-crise',
-        },
-      ],
-    };
+  private readonly dossieService = inject(DossieService);
 
-    return accessesByLevel[this.level()] ?? [];
-  });
-  protected readonly accessLabel = computed(() => {
-    switch (this.level()) {
-      case 1:
-        return 'Acesso geral';
-      case 2:
-        return 'Diretoria de divisão';
-      case 3:
-        return 'Gabinete ministerial';
-      default:
-        return 'Acesso não identificado';
+  protected readonly estado = signal<EstadoPainel>('carregando');
+  protected readonly dossies = signal<DossieResumo[]>([]);
+  protected readonly mensagemErro = signal('');
+  private readonly nivelServidor = signal(0);
+
+  protected readonly level = computed(() => this.auth.currentUser()?.nivel ?? this.nivelServidor());
+  protected readonly accessLabel = computed(() => rotuloNivel(this.level()));
+  protected readonly mostrarCabecalho = computed(() =>
+    this.level() >= 1 && this.level() <= 3 && this.estado() !== 'sessao' && this.estado() !== 'administrador');
+  protected readonly indicadores = computed<Indicador[]>(() => {
+    const dossies = this.dossies();
+    const ultima = dossies.map((dossie) => dossie.atualizado_em).sort().at(-1) ?? null;
+    const lista: Indicador[] = [{
+      rotulo: 'Dossiês autorizados',
+      valor: String(dossies.length),
+      detalhe: 'Liberados pelo servidor para o seu nível',
+    }];
+
+    if (this.level() === 2) {
+      lista.push({
+        rotulo: 'Pendências abertas',
+        valor: String(dossies.reduce((total, dossie) => total + dossie.pendencias_abertas, 0)),
+        detalhe: 'Aguardando ação das divisões',
+      });
     }
+    if (this.level() === 3) {
+      lista.push({
+        rotulo: 'Decisões pendentes',
+        valor: String(dossies.reduce((total, dossie) => total + dossie.decisoes_pendentes, 0)),
+        detalhe: 'Aguardando deliberação do ministro',
+      });
+    }
+    lista.push({
+      rotulo: 'Última atualização',
+      valor: ultima ? formatarData(ultima) : '—',
+      detalhe: 'Registro mais recente entre os dossiês',
+    });
+    return lista;
   });
+
+  protected readonly formatarData = formatarData;
+  protected readonly plural = plural;
+  protected readonly tomSituacao = tomSituacao;
 
   ngOnInit(): void {
     if (!this.auth.currentUser()) {
@@ -95,5 +81,37 @@ export class RestrictedDashboard implements OnInit {
         catchError(() => EMPTY),
       ).subscribe();
     }
+    this.carregar();
+  }
+
+  protected carregar(): void {
+    this.estado.set('carregando');
+    this.dossieService.listarDossies().subscribe({
+      next: (resposta) => {
+        this.nivelServidor.set(resposta.nivel);
+        this.dossies.set(resposta.dossies);
+        this.estado.set('pronto');
+      },
+      error: (erro: ApiError) => this.tratarErro(erro),
+    });
+  }
+
+  protected rotaDossie(codigo: string): string[] {
+    return ['/restricted-dashboard', codigo.toLowerCase()];
+  }
+
+  private tratarErro(erro: ApiError): void {
+    if (erro.status === 401) {
+      this.estado.set('sessao');
+      return;
+    }
+    if (erro.status === 403) {
+      this.estado.set('administrador');
+      return;
+    }
+    this.mensagemErro.set(erro.status === 0
+      ? 'Não foi possível conectar à API. Confira se o backend está em execução.'
+      : typeof erro.detail === 'string' ? erro.detail : 'Não foi possível carregar os dossiês.');
+    this.estado.set('erro');
   }
 }

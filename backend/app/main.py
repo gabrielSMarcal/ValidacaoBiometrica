@@ -18,7 +18,7 @@ import zlib
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from time import monotonic
@@ -39,7 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy import (Boolean, CheckConstraint, Computed, DateTime, ForeignKey, Integer,
+from sqlalchemy import (Boolean, CheckConstraint, Computed, Date, DateTime, ForeignKey, Integer,
                         LargeBinary, String, UniqueConstraint, create_engine, delete, select, text)
 from sqlalchemy.dialects.mysql import MEDIUMBLOB
 from sqlalchemy.engine import URL
@@ -303,6 +303,61 @@ class DesafioBiometrico(Base):
     usuario_id: Mapped[int] = mapped_column(ForeignKey('usuarios.id', ondelete='CASCADE'), index=True)
     expira_em: Mapped[datetime] = mapped_column(DateTime, index=True)
     senha_fingerprint: Mapped[str] = mapped_column(String(64))
+
+
+# Cofre de dossiês: cada nível recebe um recorte próprio (não cumulativo).
+
+
+class Dossie(Base):
+
+    __tablename__ = 'dossies'
+    __table_args__ = {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    codigo: Mapped[str] = mapped_column(String(20), unique=True)
+    titulo: Mapped[str] = mapped_column(String(160))
+    situacao: Mapped[str] = mapped_column(String(60))
+    divisao: Mapped[str] = mapped_column(String(120))
+    atualizado_em: Mapped[date] = mapped_column(Date)
+
+
+class DossieRecorte(Base):
+
+    __tablename__ = 'dossie_recortes'
+    __table_args__ = (
+        CheckConstraint('nivel BETWEEN 1 AND 3', name='ck_recorte_nivel'),
+        UniqueConstraint('dossie_id', 'nivel', name='uq_recorte_dossie_nivel'),
+        {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Sem index=True: o InnoDB indexa a chave estrangeira sem exigir o privilégio INDEX.
+    dossie_id: Mapped[int] = mapped_column(ForeignKey('dossies.id', ondelete='CASCADE'))
+    nivel: Mapped[int] = mapped_column(Integer)
+    resumo: Mapped[str] = mapped_column(String(600))
+    orientacao: Mapped[str] = mapped_column(String(400))
+
+
+TIPOS_REGISTRO = ('campo', 'pendencia', 'decisao', 'historico')
+SITUACOES_ABERTAS = ('Aberta', 'Pendente')
+
+
+class DossieRegistro(Base):
+
+    __tablename__ = 'dossie_registros'
+    __table_args__ = (
+        CheckConstraint("tipo IN ('campo', 'pendencia', 'decisao', 'historico')", name='ck_registro_tipo'),
+        {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4'},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recorte_id: Mapped[int] = mapped_column(ForeignKey('dossie_recortes.id', ondelete='CASCADE'))
+    tipo: Mapped[str] = mapped_column(String(20))
+    titulo: Mapped[str] = mapped_column(String(160))
+    descricao: Mapped[str | None] = mapped_column(String(600), nullable=True)
+    data: Mapped[date | None] = mapped_column(Date, nullable=True)
+    situacao: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 
 def criar_engine(settings: Settings):
@@ -897,6 +952,8 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
             with db_engine.connect() as connection:
                 connection.execute(select(Usuario.id, Usuario.biometria_ref).limit(1))
                 connection.execute(select(DesafioBiometrico.token_hash).limit(1))
+                for tabela in (Dossie, DossieRecorte, DossieRegistro):
+                    connection.execute(select(tabela.id).limit(1))
 
         except SQLAlchemyError:
             raise RuntimeError('Banco indisponível ou esquema desatualizado. Confira MySQL/.env e execute a inicialização ou scripts.migrar_banco para bancos antigos.') from None
@@ -905,8 +962,11 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
 
         db_engine.dispose()
 
-    app = FastAPI(title='APS • Biometria por câmera', version='2.0.0', lifespan=lifespan,
-                  description='Protótipo acadêmico: segmentação guiada, sem detector pronto e sem prova de vida. Níveis 1, 2 e 3 são grupos, sem permissões definidas.')
+    app = FastAPI(title='APS • Biometria por câmera', version='2.1.0', lifespan=lifespan,
+                  description='Protótipo acadêmico: segmentação guiada, sem detector pronto e sem prova de vida. '
+                              'Após a verificação facial, os níveis 1, 2 e 3 recebem do servidor somente o recorte '
+                              'de cada dossiê autorizado ao seu nível. O administrador (nível 4) gerencia usuários '
+                              'e não consulta dossiês. Conteúdo fictício para demonstração.')
     app.state.engine = db_engine
     app.add_middleware(ProtecoesHTTP, settings=settings)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost', '127.0.0.1', '[::1]', 'testserver'])
@@ -1299,6 +1359,94 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
         if not user or not user.ativo:
             raise HTTPException(401, 'Sessão ausente ou expirada. Valide seu rosto novamente.')
         return {'usuario': publico(user), 'mensagem': f'Você é do nível {user.nivel}'}
+
+    def leitor_dossies(request: Request, db=Depends(banco)):
+        """Exige a sessão concedida após a biometria e um nível de consulta (1 a 3)."""
+        token = request.cookies.get(COOKIE)
+        sessao = db.get(Sessao, hash_token(token)) if token else None
+        user = db.get(Usuario, sessao.usuario_id) if sessao and sessao.expira_em > agora() else None
+
+        if not user or not user.ativo:
+            negar(db, request, 'dossie', 'sessao_invalida', 401,
+                  'Sessão ausente ou expirada. Entre novamente para consultar os dossiês.')
+        if user.nivel not in (1, 2, 3):
+            negar(db, request, 'dossie', 'perfil_sem_dossies', 403,
+                  'O administrador gerencia usuários e não consulta dossiês.', user.id)
+        return user
+
+    def dados_dossie(dossie):
+        return {'codigo': dossie.codigo, 'titulo': dossie.titulo, 'situacao': dossie.situacao,
+                'divisao': dossie.divisao, 'atualizado_em': dossie.atualizado_em.isoformat()}
+
+    @app.get('/api/dossies', tags=['Dossiês'])
+    def listar_dossies(user=Depends(leitor_dossies), db=Depends(banco)):
+
+        linhas = db.execute(
+            select(Dossie, DossieRecorte)
+            .join(DossieRecorte, DossieRecorte.dossie_id == Dossie.id)
+            .where(DossieRecorte.nivel == user.nivel)
+            .order_by(Dossie.atualizado_em.desc(), Dossie.codigo)
+        ).all()
+        abertos = defaultdict(int)
+        recortes = [recorte.id for _dossie, recorte in linhas]
+
+        if recortes:
+            consulta = select(DossieRegistro.recorte_id, DossieRegistro.tipo).where(
+                DossieRegistro.recorte_id.in_(recortes),
+                DossieRegistro.tipo.in_(('pendencia', 'decisao')),
+                DossieRegistro.situacao.in_(SITUACOES_ABERTAS))
+            for recorte_id, tipo in db.execute(consulta):
+                abertos[(recorte_id, tipo)] += 1
+
+        return {'nivel': user.nivel, 'dossies': [
+            {**dados_dossie(dossie), 'resumo': recorte.resumo,
+             'pendencias_abertas': abertos[(recorte.id, 'pendencia')],
+             'decisoes_pendentes': abertos[(recorte.id, 'decisao')]}
+            for dossie, recorte in linhas
+        ]}
+
+    @app.get('/api/dossies/{codigo}', tags=['Dossiês'])
+    def consultar_dossie(codigo: str, request: Request, user=Depends(leitor_dossies), db=Depends(banco)):
+
+        nao_liberado = 'Dossiê inexistente ou não liberado para o seu nível de acesso.'
+        codigo = codigo.strip().upper()
+
+        if not re.fullmatch(r'DOS-\d{4}-\d{3}', codigo):
+            negar(db, request, 'dossie', 'codigo_invalido', 404, nao_liberado, user.id)
+
+        linha = db.execute(
+            select(Dossie, DossieRecorte)
+            .outerjoin(DossieRecorte, (DossieRecorte.dossie_id == Dossie.id)
+                       & (DossieRecorte.nivel == user.nivel))
+            .where(Dossie.codigo == codigo)
+        ).first()
+
+        # Mesma resposta para inexistente e não autorizado: não revela quais dossiês existem.
+        if not linha or linha[1] is None:
+            motivo = 'sem_recorte' if linha else 'inexistente'
+            negar(db, request, 'dossie', f'{motivo} {codigo}', 404, nao_liberado, user.id)
+
+        dossie, recorte = linha
+        registros = db.scalars(select(DossieRegistro).where(DossieRegistro.recorte_id == recorte.id)
+                               .order_by(DossieRegistro.ordem, DossieRegistro.id)).all()
+        por_tipo = {tipo: [r for r in registros if r.tipo == tipo] for tipo in TIPOS_REGISTRO}
+
+        def item(registro):
+            return {'titulo': registro.titulo, 'descricao': registro.descricao,
+                    'prazo': registro.data.isoformat() if registro.data else None,
+                    'situacao': registro.situacao}
+
+        log(db, request, 'dossie', True, f'consultado {codigo}', user.id)
+        db.commit()
+
+        return {'nivel': user.nivel, 'dossie': dados_dossie(dossie), 'recorte': {
+            'nivel': recorte.nivel, 'resumo': recorte.resumo, 'orientacao': recorte.orientacao,
+            'campos': [{'rotulo': r.titulo, 'valor': r.descricao or ''} for r in por_tipo['campo']],
+            'pendencias': [item(r) for r in por_tipo['pendencia']],
+            'decisoes': [item(r) for r in por_tipo['decisao']],
+            'historico': [{'data': r.data.isoformat() if r.data else None, 'descricao': r.titulo}
+                          for r in sorted(por_tipo['historico'], key=lambda r: (r.data or date.min, r.ordem))],
+        }}
 
     @app.post('/api/sair', tags=['Sessão'])
     def sair(request: Request, response: Response, db=Depends(banco)):

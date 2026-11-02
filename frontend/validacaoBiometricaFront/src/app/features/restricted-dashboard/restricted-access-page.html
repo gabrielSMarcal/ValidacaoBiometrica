@@ -1,33 +1,146 @@
-<main class="page-panel access-page" id="main-content" aria-labelledby="access-title"
-      [attr.data-level]="access() && hasAccess() ? access()?.level : null">
-  @if (access() && hasAccess()) {
-    <header class="access-header">
-      <p class="eyebrow">Módulo restrito • nível {{ access()?.level }}</p>
-      <h1 id="access-title">{{ access()?.title }}</h1>
-      <p class="intro">{{ access()?.description }}</p>
-    </header>
-    <section class="information-card" aria-labelledby="information-title">
-      <p class="panel-tag">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></svg>
-        Área demonstrativa
-      </p>
-      <h2 id="information-title">Informações disponíveis</h2>
-      <p>{{ access()?.guidance }}</p>
-      <ul>
-        <li>Conteúdo fictício para demonstração do fluxo de acesso.</li>
-        <li>Detalhes de substâncias, produção, transporte e contenção foram omitidos.</li>
-        <li>Consulte sempre os procedimentos e canais oficiais da instituição.</li>
-      </ul>
-    </section>
-  } @else {
-    <section class="access-denied">
-      <span class="access-denied__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" /></svg>
-      </span>
-      <p class="eyebrow">Acesso restrito</p>
-      <h1 id="access-title">Módulo indisponível</h1>
-      <p class="intro">Seu nível de acesso não permite consultar este módulo ou o endereço não existe.</p>
-    </section>
+<main class="page-panel level-scope dossier-page" id="main-content" aria-labelledby="dossier-title"
+      [attr.data-level]="nivel() || null" [attr.aria-busy]="estado() === 'carregando'">
+  @switch (estado()) {
+    @case ('pronto') {
+      @if (detalhe(); as d) {
+        <header class="dossier-header">
+          <p class="eyebrow">Dossiê {{ d.dossie.codigo }} · Recorte do nível {{ d.recorte.nivel }}</p>
+          <h1 id="dossier-title">{{ d.dossie.titulo }}</h1>
+          <dl class="dossier-meta">
+            <div>
+              <dt>Situação</dt>
+              <dd><span class="status-chip" [attr.data-tone]="tomSituacao(d.dossie.situacao)">{{ d.dossie.situacao }}</span></dd>
+            </div>
+            <div>
+              <dt>Divisão responsável</dt>
+              <dd>{{ d.dossie.divisao }}</dd>
+            </div>
+            <div>
+              <dt>Última atualização</dt>
+              <dd>{{ formatarData(d.dossie.atualizado_em) }}</dd>
+            </div>
+          </dl>
+        </header>
+
+        <div class="dossier-layout">
+          <div class="dossier-main">
+            <section class="card" aria-labelledby="summary-title">
+              <h2 id="summary-title">{{ tituloResumo() }}</h2>
+              <p class="summary">{{ d.recorte.resumo }}</p>
+            </section>
+
+            @if (d.recorte.pendencias.length > 0) {
+              <section class="card" aria-labelledby="pending-title">
+                <h2 id="pending-title">Pendências da divisão</h2>
+                <ul class="items">
+                  @for (item of d.recorte.pendencias; track item.titulo) {
+                    <li class="item" [class.is-done]="concluido(item)">
+                      <div class="item__head">
+                        <strong>{{ item.titulo }}</strong>
+                        <span class="status-chip" [attr.data-tone]="tomSituacao(item.situacao)">{{ item.situacao }}</span>
+                      </div>
+                      @if (item.descricao) { <p>{{ item.descricao }}</p> }
+                      @if (item.prazo) { <p class="item__date">{{ concluido(item) ? 'Concluída em' : 'Prazo' }}: {{ formatarData(item.prazo) }}</p> }
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+
+            @if (d.recorte.decisoes.length > 0) {
+              <section class="card" aria-labelledby="decisions-title">
+                <h2 id="decisions-title">Decisões do ministro</h2>
+                <ul class="items">
+                  @for (item of d.recorte.decisoes; track item.titulo) {
+                    <li class="item" [class.is-done]="concluido(item)">
+                      <div class="item__head">
+                        <strong>{{ item.titulo }}</strong>
+                        <span class="status-chip" [attr.data-tone]="tomSituacao(item.situacao)">{{ item.situacao }}</span>
+                      </div>
+                      @if (item.descricao) { <p>{{ item.descricao }}</p> }
+                      @if (item.prazo) { <p class="item__date">{{ concluido(item) ? 'Registrada em' : 'Prazo' }}: {{ formatarData(item.prazo) }}</p> }
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+
+            @if (d.recorte.historico.length > 0) {
+              <section class="card" aria-labelledby="history-title">
+                <h2 id="history-title">Histórico</h2>
+                <ol class="timeline">
+                  @for (evento of d.recorte.historico; track $index) {
+                    <li>
+                      @if (evento.data) { <time [attr.datetime]="evento.data">{{ formatarData(evento.data) }}</time> }
+                      <span>{{ evento.descricao }}</span>
+                    </li>
+                  }
+                </ol>
+              </section>
+            }
+          </div>
+
+          <aside class="dossier-side" aria-label="Informações complementares">
+            @if (d.recorte.campos.length > 0) {
+              <section class="card" aria-labelledby="fields-title">
+                <h2 id="fields-title">Informações do recorte</h2>
+                <dl class="fields">
+                  @for (campo of d.recorte.campos; track campo.rotulo) {
+                    <div><dt>{{ campo.rotulo }}</dt><dd>{{ campo.valor }}</dd></div>
+                  }
+                </dl>
+              </section>
+            }
+            <section class="callout" aria-labelledby="guidance-title">
+              <h2 id="guidance-title">Orientação</h2>
+              <p>{{ d.recorte.orientacao }}</p>
+            </section>
+            <p class="access-note">
+              Recorte liberado pelo servidor para o nível {{ d.recorte.nivel }} ({{ rotuloNivel(d.recorte.nivel) }}).
+              Os outros níveis recebem informações diferentes deste dossiê. Conteúdo fictício para demonstração acadêmica.
+            </p>
+          </aside>
+        </div>
+      }
+    }
+    @case ('carregando') {
+      <section class="state-card" role="status">
+        <h1 id="dossier-title">Consultando o dossiê</h1>
+        <p>Verificando no servidor se o seu nível pode acessar o dossiê {{ codigo }}.</p>
+      </section>
+    }
+    @case ('negado') {
+      <section class="state-card is-denied">
+        <span class="denied-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" /></svg>
+        </span>
+        <p class="eyebrow denied-eyebrow">Acesso negado pelo servidor</p>
+        <h1 id="dossier-title">Dossiê indisponível</h1>
+        <p>O dossiê {{ codigo }} não existe ou não foi liberado para o seu nível de acesso. A tentativa foi registrada no log de acesso.</p>
+      </section>
+    }
+    @case ('sessao') {
+      <section class="state-card is-denied">
+        <h1 id="dossier-title">Sessão encerrada</h1>
+        <p>Sua sessão expirou ou não foi iniciada. Entre novamente e confirme sua identidade pela câmera.</p>
+        <div class="state-actions"><a routerLink="/login">Entrar novamente</a></div>
+      </section>
+    }
+    @case ('administrador') {
+      <section class="state-card">
+        <h1 id="dossier-title">Acesso administrativo</h1>
+        <p>O administrador gerencia usuários e não consulta dossiês.</p>
+        <div class="state-actions"><a routerLink="/painel-admin">Ir para o painel do administrador</a></div>
+      </section>
+    }
+    @default {
+      <section class="state-card is-denied" role="alert">
+        <h1 id="dossier-title">Não foi possível carregar o dossiê</h1>
+        <p>{{ mensagemErro() }}</p>
+        <div class="state-actions"><button type="button" (click)="carregar()">Tentar novamente</button></div>
+      </section>
+    }
   }
-  <a class="back-link" routerLink="/restricted-dashboard">← Voltar ao dashboard</a>
+
+  <a class="back-link" routerLink="/restricted-dashboard">← Voltar aos dossiês</a>
 </main>

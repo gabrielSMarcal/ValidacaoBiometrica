@@ -27,9 +27,9 @@
 
         <label for="nivel">Nível</label>
         <select id="nivel" formControlName="nivel">
-          <option [ngValue]="1">Funcionário nível 1</option>
-          <option [ngValue]="2">Funcionário nível 2</option>
-          <option [ngValue]="3">Funcionário nível 3</option>
+          <option [ngValue]="1">Nível 1 — Permissão geral</option>
+          <option [ngValue]="2">Nível 2 — Diretor de divisão</option>
+          <option [ngValue]="3">Nível 3 — Ministro do Meio Ambiente</option>
         </select>
 
         <p class="status" role="status" aria-live="polite">{{ statusMessage() }}</p>
