@@ -1,7 +1,9 @@
-<main class="page-panel user-page" aria-labelledby="user-management-title">
-  <p class="eyebrow">Administração</p>
-  <h1 id="user-management-title">Gerenciamento de usuários</h1>
-  <p>Consulte e administre os usuários cadastrados.</p>
+<main class="page-panel user-page" id="main-content" aria-labelledby="user-management-title">
+  <header class="management-header">
+    <p class="eyebrow">Administração</p>
+    <h1 id="user-management-title">Gerenciamento de usuários</h1>
+    <p>Consulte e administre os usuários cadastrados.</p>
+  </header>
   @if (cadastroConcluido) {
     <p class="success" role="status" aria-live="polite">Usuário cadastrado com sucesso.</p>
   }
@@ -9,51 +11,58 @@
     <p class="error" role="alert">{{ errorMessage() }}</p>
   }
   @if (loading()) {
-    <p role="status">Carregando usuários…</p>
+    <p class="state-message" role="status">Carregando usuários…</p>
   } @else if (users().length === 0) {
-    <p>Nenhum usuário cadastrado.</p>
+    <p class="state-message">Nenhum usuário cadastrado.</p>
   } @else {
-    <div class="table-wrap">
-      <table>
-        <caption>Usuários cadastrados</caption>
-        <thead>
-          <tr><th scope="col">Nome</th><th scope="col">Nível</th><th scope="col">Status</th><th scope="col">Ações</th></tr>
-        </thead>
-        <tbody>
-          @for (user of users(); track user.id) {
-            <tr>
-              @if (editingId() === user.id && user.nivel !== 4) {
-                <td>
-                  <label class="sr-only" [for]="'name-' + user.id">Nome</label>
-                  <input [id]="'name-' + user.id" [value]="editing().nome" (input)="updateEditing('nome', $any($event.target).value)">
-                  <label class="sr-only" [for]="'password-' + user.id">Nova senha</label>
-                  <input [id]="'password-' + user.id" type="password" placeholder="Nova senha (opcional)" [value]="editing().senha" (input)="updateEditing('senha', $any($event.target).value)">
-                </td>
-                <td><select [value]="editing().nivel" (change)="updateEditing('nivel', $any($event.target).value)">
-                  <option [value]="1">1</option><option [value]="2">2</option><option [value]="3">3</option>
-                  <option [value]="4" disabled>4 (administrador reservado)</option>
-                </select></td>
-              } @else {
-                <td>{{ user.nome }}</td><td>{{ user.nivel === 4 ? '4 (admin)' : user.nivel }}</td>
-              }
-              <td>{{ user.ativo ? 'Ativo' : 'Inativo' }}</td>
-              <td class="actions">
+    <div class="table-card">
+      <div class="table-wrap">
+        <table>
+          <caption>Usuários cadastrados</caption>
+          <thead>
+            <tr><th scope="col">Nome</th><th scope="col">Nível</th><th scope="col">Status</th><th scope="col">Ações</th></tr>
+          </thead>
+          <tbody>
+            @for (user of users(); track user.id) {
+              <tr [class.is-editing]="editingId() === user.id && user.nivel !== 4">
                 @if (editingId() === user.id && user.nivel !== 4) {
-                  <button type="button" [disabled]="savingId() === user.id" (click)="saveEditing(user)">Salvar</button>
-                  <button type="button" (click)="cancelEditing()">Cancelar</button>
-                } @else if (user.nivel === 4) {
-                  <span>Administrador reservado</span>
+                  <td>
+                    <div class="edit-fields">
+                      <label class="sr-only" [for]="'name-' + user.id">Nome</label>
+                      <input [id]="'name-' + user.id" [value]="editing().nome" (input)="updateEditing('nome', $any($event.target).value)">
+                      <label class="sr-only" [for]="'password-' + user.id">Nova senha</label>
+                      <input [id]="'password-' + user.id" type="password" placeholder="Nova senha (opcional)" [value]="editing().senha" (input)="updateEditing('senha', $any($event.target).value)">
+                    </div>
+                  </td>
+                  <td><select [value]="editing().nivel" (change)="updateEditing('nivel', $any($event.target).value)">
+                    <option [value]="1">1</option><option [value]="2">2</option><option [value]="3">3</option>
+                    <option [value]="4" disabled>4 (administrador reservado)</option>
+                  </select></td>
                 } @else {
-                  <button type="button" (click)="startEditing(user)">Editar</button>
-                  <button type="button" [disabled]="savingId() === user.id" (click)="toggleActive(user)">{{ user.ativo ? 'Desativar' : 'Ativar' }}</button>
-                  <button type="button" class="danger" [disabled]="savingId() === user.id" (click)="remove(user)">Excluir</button>
+                  <td class="user-name">{{ user.nome }}</td>
+                  <td><span class="level-pill" [attr.data-level]="user.nivel">{{ user.nivel === 4 ? '4 (admin)' : user.nivel }}</span></td>
                 }
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
+                <td><span class="status-pill" [class.is-inactive]="!user.ativo">{{ user.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+                <td>
+                  <div class="actions">
+                    @if (editingId() === user.id && user.nivel !== 4) {
+                      <button type="button" class="primary" [disabled]="savingId() === user.id" (click)="saveEditing(user)">Salvar</button>
+                      <button type="button" (click)="cancelEditing()">Cancelar</button>
+                    } @else if (user.nivel === 4) {
+                      <span class="reserved">Administrador reservado</span>
+                    } @else {
+                      <button type="button" (click)="startEditing(user)">Editar</button>
+                      <button type="button" [disabled]="savingId() === user.id" (click)="toggleActive(user)">{{ user.ativo ? 'Desativar' : 'Ativar' }}</button>
+                      <button type="button" class="danger" [disabled]="savingId() === user.id" (click)="remove(user)">Excluir</button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     </div>
   }
-  <a routerLink="/painel-admin">Voltar ao painel</a>
+  <a class="back-link" routerLink="/painel-admin">Voltar ao painel</a>
 </main>

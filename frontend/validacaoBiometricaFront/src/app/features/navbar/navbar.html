@@ -1,16 +1,26 @@
 <header class="navbar">
   <div class="navbar-inner">
     <a class="brand" href="#top" (click)="closeMenu()">
-      <span class="brand-kicker">Governo Federal</span>
-      <span class="brand-name">Ministério do Meio Ambiente e Mudança do Clima</span>
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32">
+          <path d="M7 25C6 15 12 7 26 6c1 13-6 20-19 19Z" />
+          <path d="M7 25 19 13" />
+        </svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-kicker">Governo Federal</span>
+        <span class="brand-name">Ministério do Meio Ambiente e Mudança do Clima</span>
+      </span>
     </a>
 
     <nav class="desktop-nav" aria-label="Principal">
       @for (link of links; track link.href) {
         <a [href]="link.href">{{ link.label }}</a>
       }
-
-      <a routerLink="/login" (click)="closeMenu()">Área Restrita</a>
+      <a class="nav-restricted" routerLink="/login" (click)="closeMenu()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+        Área Restrita
+      </a>
     </nav>
 
     <button
@@ -21,7 +31,13 @@
       (click)="toggleMenu()"
     >
       <span class="menu-button-label">Menu</span>
-      <span aria-hidden="true">{{ menuOpen() ? 'Fechar' : 'Abrir' }}</span>
+      <span class="menu-button-icon" aria-hidden="true">
+        @if (menuOpen()) {
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        } @else {
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        }
+      </span>
     </button>
   </div>
 
@@ -30,8 +46,7 @@
       @for (link of links; track link.href) {
         <a [href]="link.href" (click)="closeMenu()">{{ link.label }}</a>
       }
-
-      <a routerLink="/login" (click)="closeMenu()">Área Restrita</a>
+      <a class="nav-restricted" routerLink="/login" (click)="closeMenu()">Área Restrita</a>
     </nav>
   }
 </header>

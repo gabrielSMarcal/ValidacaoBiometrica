@@ -1,35 +1,46 @@
-<main class="page-panel user-page" aria-labelledby="user-create-title">
-  <p class="eyebrow">Administração</p>
-  <h1 id="user-create-title">Cadastrar usuário</h1>
-  <p>Preencha os dados e continue para a captura facial. O cadastro só será salvo depois que todas as etapas forem validadas.</p>
+<main class="page-panel user-page" id="main-content" aria-labelledby="user-create-title">
+  <div class="user-layout">
+    <header class="user-intro">
+      <p class="eyebrow">Administração</p>
+      <h1 id="user-create-title">Cadastrar usuário</h1>
+      <p>Preencha os dados e continue para a captura facial. O cadastro só será salvo depois que todas as etapas forem validadas.</p>
+      <ol class="flow-steps" aria-label="Etapas do cadastro">
+        <li class="is-current" aria-current="step"><span aria-hidden="true">1</span> Dados do usuário</li>
+        <li><span aria-hidden="true">2</span> Cadastro facial</li>
+        <li><span aria-hidden="true">3</span> Cadastro salvo</li>
+      </ol>
+    </header>
 
-  <form [formGroup]="form" (ngSubmit)="cadastrar()">
-    <label for="nome">Nome</label>
-    <input id="nome" formControlName="nome" autocomplete="name">
+    <div class="form-card">
+      <form [formGroup]="form" (ngSubmit)="cadastrar()">
+        <label for="nome">Nome</label>
+        <input id="nome" formControlName="nome" autocomplete="name">
 
-    <label for="cpf">CPF</label>
-    <input id="cpf" formControlName="cpf" inputmode="numeric" autocomplete="username">
-    @if (form.controls.cpf.touched && form.controls.cpf.invalid) {
-      <p class="error" role="alert">Informe um CPF válido, com 11 dígitos.</p>
-    }
+        <label for="cpf">CPF</label>
+        <input id="cpf" formControlName="cpf" inputmode="numeric" autocomplete="username">
+        @if (form.controls.cpf.touched && form.controls.cpf.invalid) {
+          <p class="error" role="alert">Informe um CPF válido, com 11 dígitos.</p>
+        }
 
-    <label for="senha">Senha</label>
-    <input id="senha" type="password" formControlName="senha" autocomplete="new-password">
+        <label for="senha">Senha</label>
+        <input id="senha" type="password" formControlName="senha" autocomplete="new-password">
 
-    <label for="nivel">Nível</label>
-    <select id="nivel" formControlName="nivel">
-      <option [ngValue]="1">Funcionário nível 1</option>
-      <option [ngValue]="2">Funcionário nível 2</option>
-      <option [ngValue]="3">Funcionário nível 3</option>
-    </select>
+        <label for="nivel">Nível</label>
+        <select id="nivel" formControlName="nivel">
+          <option [ngValue]="1">Funcionário nível 1</option>
+          <option [ngValue]="2">Funcionário nível 2</option>
+          <option [ngValue]="3">Funcionário nível 3</option>
+        </select>
 
-    <p class="status" role="status" aria-live="polite">{{ statusMessage() }}</p>
-    @if (errorMessage()) {
-      <p class="error" role="alert">{{ errorMessage() }}</p>
-    }
-    <button type="submit" [disabled]="form.invalid || submitting()">
-      {{ submitting() ? 'Abrindo captura…' : 'Continuar para captura facial' }}
-    </button>
-  </form>
-  <a routerLink="/painel-admin">Voltar ao painel</a>
+        <p class="status" role="status" aria-live="polite">{{ statusMessage() }}</p>
+        @if (errorMessage()) {
+          <p class="error" role="alert">{{ errorMessage() }}</p>
+        }
+        <button type="submit" [disabled]="form.invalid || submitting()">
+          {{ submitting() ? 'Abrindo captura…' : 'Continuar para captura facial' }}
+        </button>
+      </form>
+    </div>
+  </div>
+  <a class="back-link" routerLink="/painel-admin">Voltar ao painel</a>
 </main>

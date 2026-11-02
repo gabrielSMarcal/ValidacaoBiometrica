@@ -1,111 +1,27 @@
-:host {
-  display: block;
-}
-
-.navbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  border-bottom: 1px solid rgba(15, 52, 35, 0.12);
-  background: rgba(248, 250, 245, 0.92);
-  backdrop-filter: blur(12px);
-}
-
-.navbar-inner,
-.mobile-nav {
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: 1rem 1.5rem;
-}
-
-.navbar-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.brand {
-  display: grid;
-  gap: 0.125rem;
-  color: inherit;
-  text-decoration: none;
-}
-
-.brand-kicker {
-  color: #0f5a3c;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.brand-name {
-  color: #0b1f17;
-  font-size: 1rem;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.desktop-nav {
-  display: none;
-  align-items: center;
-  gap: 1rem;
-}
-
-.desktop-nav a,
-.mobile-nav a {
-  color: #31443a;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.desktop-nav a:hover,
-.desktop-nav a:focus-visible,
-.mobile-nav a:hover,
-.mobile-nav a:focus-visible,
-.brand:hover,
-.brand:focus-visible,
-.menu-button:hover,
-.menu-button:focus-visible {
-  color: #0f5a3c;
-}
-
-.menu-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2.75rem;
-  padding: 0.65rem 1rem;
-  border: 1px solid rgba(15, 52, 35, 0.16);
-  border-radius: 999px;
-  background: #fff;
-  color: #0b1f17;
-  font: inherit;
-  font-weight: 700;
-}
-
-.menu-button-label {
-  display: none;
-}
-
-.mobile-nav {
-  display: grid;
-  gap: 0.875rem;
-  padding-top: 0;
-}
-
-@media (min-width: 48rem) {
-  .desktop-nav {
-    display: flex;
-  }
-
-  .menu-button,
-  .mobile-nav {
-    display: none;
-  }
-
-  .menu-button-label {
-    display: inline;
-  }
-}
+:host{display:block}
+.navbar{position:sticky;top:0;z-index:10;border-top:4px solid var(--color-navy);border-bottom:1px solid var(--color-border);background:rgba(255,255,255,.97);box-shadow:0 1px 6px rgba(7,29,65,.06)}
+.navbar-inner,.mobile-nav{width:min(100% - 3rem,var(--page-width));margin:0 auto}
+.navbar-inner{display:flex;min-height:4.75rem;align-items:center;justify-content:space-between;gap:1.5rem}
+.brand{display:flex;align-items:center;gap:.75rem;color:inherit;text-decoration:none}
+.brand-mark{display:grid;width:2.5rem;height:2.5rem;flex:none;place-items:center;border-radius:50%;background:var(--color-green-soft)}
+.brand-mark svg{width:1.5rem;fill:none;stroke:var(--color-green);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brand-text{display:grid;gap:.125rem}
+.brand-kicker{color:var(--color-muted);font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.brand-name{color:var(--color-navy);font-size:1.0625rem;font-weight:700;line-height:1.2}
+.brand:hover .brand-name{color:var(--color-primary)}
+.desktop-nav{display:none;align-items:center;gap:.25rem}
+.desktop-nav a,.mobile-nav a{border-radius:var(--radius-pill);color:var(--color-primary);font-weight:600;text-decoration:none}
+.desktop-nav a{padding:.5rem .875rem}
+.desktop-nav a:hover,.mobile-nav a:hover{background:var(--color-primary-soft);color:var(--color-primary-hover)}
+.desktop-nav .nav-restricted{display:inline-flex;align-items:center;gap:.5rem;margin-left:.75rem;padding:.5rem 1.125rem;border:1px solid var(--color-primary)}
+.nav-restricted svg{width:1.125rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.desktop-nav .nav-restricted:hover{background:var(--color-primary);color:#fff}
+.menu-button{display:inline-flex;min-height:2.75rem;align-items:center;gap:.5rem;padding:.5rem 1rem;border:1px solid var(--color-border-strong);border-radius:var(--radius-pill);background:#fff;color:var(--color-primary);cursor:pointer;font-weight:700}
+.menu-button:hover{border-color:var(--color-primary);background:var(--color-primary-soft)}
+.menu-button-icon{display:inline-flex}
+.menu-button-icon svg{width:1.25rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.mobile-nav{display:grid;gap:.25rem;padding:.5rem 0 1rem;border-top:1px solid var(--color-border)}
+.mobile-nav a{padding:.75rem 1rem}
+.mobile-nav .nav-restricted{margin-top:.25rem;border:1px solid var(--color-primary);text-align:center}
+@media (min-width:62rem){.desktop-nav{display:flex}.menu-button,.mobile-nav{display:none}}
+@media (max-width:30rem){.navbar-inner,.mobile-nav{width:min(100% - 2rem,var(--page-width))}.brand-mark{display:none}.brand-name{font-size:.9375rem}}

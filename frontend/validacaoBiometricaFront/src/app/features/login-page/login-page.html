@@ -1,32 +1,68 @@
-<div class="login">
-  <h1 id="login-title">Acesso ao sistema</h1>
-  <p>Informe suas credenciais. Na próxima etapa, a identidade será confirmada pela câmera.</p>
-  <form [formGroup]="form" (ngSubmit)="onSubmit()" aria-labelledby="login-title">
-    <label for="cpf">CPF</label>
-    <input
-      id="cpf"
-      type="text"
-      formControlName="cpf"
-      autocomplete="username"
-      inputmode="numeric"
-      aria-describedby="cpf-help"
-    />
-    <small id="cpf-help">Digite o CPF com ou sem pontuação.</small>
+<main class="login-page" id="main-content">
+  <div class="login-layout">
+    <section class="login-intro" aria-labelledby="login-intro-title">
+      <p class="login-kicker">Cofre ambiental</p>
+      <p class="login-display" id="login-intro-title">Identificação e autenticação biométrica</p>
+      <p class="login-lead">
+        Área restrita para consulta das informações autorizadas a cada nível de acesso.
+      </p>
+      <ul class="login-points">
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+          <span>Acesso com CPF e senha</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /><circle cx="12" cy="10" r="3" /><path d="M7.5 17a5 5 0 0 1 9 0" /></svg>
+          <span>Verificação facial para os níveis 1 a 3</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
+          <span>Conteúdo exibido conforme o nível autorizado</span>
+        </li>
+      </ul>
+      <p class="login-disclaimer">
+        Ambiente demonstrativo de projeto acadêmico, sem vínculo oficial com o ministério.
+      </p>
+      <svg class="login-leaf" viewBox="0 0 220 160" aria-hidden="true">
+        <path d="M10 150C60 112 112 98 205 102" />
+        <path d="M44 128C26 84 38 34 82 10c22 44 18 88-38 118Z" />
+        <path d="M44 128 82 10" />
+        <path d="M118 104c4-38 30-62 72-70 0 42-24 66-72 70Z" class="login-leaf__fill" />
+      </svg>
+    </section>
 
-    <label for="senha">Senha</label>
-    <input
-      id="senha"
-      type="password"
-      formControlName="senha"
-      autocomplete="current-password"
-    />
-
-    @if (errorMessage()) {
-      <p class="login-error" role="alert">{{ errorMessage() }}</p>
-    }
-
-    <button type="submit" [disabled]="form.invalid || submitting()">
-      {{ submitting() ? 'Validando…' : 'Continuar' }}
-    </button>
-  </form>
-</div>
+    <div class="login">
+      <h1 id="login-title">Acesso ao sistema</h1>
+      <p>Informe suas credenciais. Na próxima etapa, a identidade será confirmada pela câmera.</p>
+      <ol class="login-steps" aria-label="Etapas do acesso">
+        <li class="is-current" aria-current="step"><span aria-hidden="true">1</span> Credenciais</li>
+        <li><span aria-hidden="true">2</span> Verificação facial</li>
+      </ol>
+      <form [formGroup]="form" (ngSubmit)="onSubmit()" aria-labelledby="login-title">
+        <label for="cpf">CPF</label>
+        <input
+          id="cpf"
+          type="text"
+          formControlName="cpf"
+          autocomplete="username"
+          inputmode="numeric"
+          aria-describedby="cpf-help"
+        />
+        <small id="cpf-help">Digite o CPF com ou sem pontuação.</small>
+        <label for="senha">Senha</label>
+        <input
+          id="senha"
+          type="password"
+          formControlName="senha"
+          autocomplete="current-password"
+        />
+        @if (errorMessage()) {
+          <p class="login-error" role="alert">{{ errorMessage() }}</p>
+        }
+        <button type="submit" [disabled]="form.invalid || submitting()">
+          {{ submitting() ? 'Validando…' : 'Continuar' }}
+        </button>
+      </form>
+    </div>
+  </div>
+</main>

@@ -1,10 +1,87 @@
+@font-face {
+  font-family: 'Rawline';
+  src: url('./assets/fonts/rawline/rawline-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Rawline';
+  src: url('./assets/fonts/rawline/rawline-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Rawline';
+  src: url('./assets/fonts/rawline/rawline-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Rawline';
+  src: url('./assets/fonts/rawline/rawline-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Rawline';
+  src: url('./assets/fonts/rawline/rawline-800.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.5;
+
+  /* Paleta inspirada nos fundamentos visuais do Padrão Digital de Governo. */
+  --color-primary: #1351b4;
+  --color-primary-hover: #0c326f;
+  --color-primary-soft: #e8f0fc;
+  --color-navy: #071d41;
+  --color-navy-soft: #0c326f;
+  --color-text: #333333;
+  --color-muted: #5f6b7a;
+  --color-background: #f8f8f8;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f3f5f8;
+  --color-border: #dce2ea;
+  --color-border-strong: #b8c2d0;
+  --color-green: #24653c;
+  --color-green-soft: #e3f5e1;
+  --color-success: #168821;
+  --color-danger: #b50909;
+  --color-danger-soft: #fde0db;
+  --color-warning: #8a6100;
+  --color-warning-soft: #fff5c2;
+  --color-gold: #b38200;
+  --color-focus: #c2850c;
+
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(7, 29, 65, 0.06), 0 6px 18px rgba(7, 29, 65, 0.05);
+  --page-width: 1140px;
+
+  font-family: 'Rawline', 'Raleway', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
   font-weight: 400;
-  background: #edf4ea;
-  color: #0b1f17;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-background);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html {
@@ -14,41 +91,110 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  background:
-    radial-gradient(circle at top left, rgba(15, 90, 60, 0.16), transparent 32%),
-    linear-gradient(180deg, #f5faf2 0%, #edf4ea 100%);
+  background: var(--color-background);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--color-navy);
+  line-height: 1.15;
+}
+
+p {
+  overflow-wrap: break-word;
+}
+
+a {
+  color: var(--color-primary);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 a,
-button {
+button,
+input,
+select,
+textarea {
   transition:
-    color 0.2s ease,
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 a:focus-visible,
-button:focus-visible {
-  outline: 3px solid rgba(15, 90, 60, 0.28);
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px dashed var(--color-focus);
   outline-offset: 3px;
 }
 
+::selection {
+  background: #c5d4eb;
+  color: var(--color-navy);
+}
+
+/* Contêiner de página: sem cartão externo, sobre a superfície neutra. */
 .page-panel {
-  width: min(100% - 3rem, var(--panel-width, 52rem));
-  margin: 4rem auto;
-  padding: 3rem;
-  border-radius: 1.5rem;
-  background: #fff;
-  box-shadow: 0 1.25rem 3rem rgba(7, 25, 16, 0.1);
+  width: min(100% - 3rem, var(--panel-width, var(--page-width)));
+  margin: 3rem auto 4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .page-panel > .eyebrow {
-  color: #0f5a3c;
+  margin: 0 0 0.75rem;
+  color: var(--color-green);
+  font-size: 0.8125rem;
   font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .page-panel h1 {
-  color: #0b1f17;
+  margin: 0 0 1rem;
+  color: var(--color-navy);
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 40rem) {
+  .page-panel {
+    width: min(100% - 2rem, var(--panel-width, var(--page-width)));
+    margin: 2rem auto 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
