@@ -4,6 +4,7 @@ import math
 from typing import Any
 import numpy as np
 from .sensoriamento import BiometriaErro
+from .pre_processamento import normalizar_iluminacao
 
 
 ALGORITMO = "auraface-v1-arcface-r100-yunet-112-v3"
@@ -15,7 +16,7 @@ _ALTURA_CANONICA = 112
 
 def extracao_caracteristicas(segmento: dict[str, Any], inferir_embedding) -> dict[str, Any]:
     """
-    4. Extração: transforma o rosto alinhado em embedding facial AuraFace.
+    4. Extração: normaliza a iluminação do rosto alinhado e infere AuraFace.
     """
 
     if not isinstance(segmento, dict):
@@ -33,7 +34,7 @@ def extracao_caracteristicas(segmento: dict[str, Any], inferir_embedding) -> dic
     if not mascara.any() or not np.isfinite(imagem).all() or np.any(imagem < 0) or np.any(imagem > 255):
         raise BiometriaErro("A região facial segmentada está vazia ou inválida.")
 
-    return _criar_assinatura(inferir_embedding(imagem))
+    return _criar_assinatura(inferir_embedding(normalizar_iluminacao(imagem)))
 
 
 def _criar_assinatura(vetor: np.ndarray) -> dict[str, Any]:

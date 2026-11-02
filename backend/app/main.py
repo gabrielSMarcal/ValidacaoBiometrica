@@ -737,7 +737,7 @@ def processar_captura(
         "etapas": [
             {"fase": "Sensores", "descricao": f"{len(frames)} quadros RGB recebidos da câmera.",
              "largura": formato[1], "altura": formato[0], "canais": formato[2]},
-            {"fase": "Pré-processamento", "descricao": "Suavização binomial e análise de luminância."},
+            {"fase": "Pré-processamento", "descricao": "Análise da luminância original e normalização fotométrica do rosto após o alinhamento (gamma e CLAHE)."},
             {"fase": "Segmentação", "descricao": "Detecção de um rosto com YuNet e alinhamento em 112×112."},
             {"fase": "Extração de características", "descricao": f"Embedding facial AuraFace com {DIMENSAO} componentes."},
             {"fase": "Classificação/interpretação", "descricao": "Comparação facial 1:1 por distância de cosseno."},
@@ -1277,7 +1277,7 @@ def criar_app(settings: Settings | None = None, engine=None) -> FastAPI:
             negar(db, request, 'verificacao', 'assinatura_invalida', 503, 'Assinatura incompatível. Contate o operador.')
 
         if not resultado['identificado']:
-            negar(db, request, 'verificacao', 'face_nao_corresponde', mensagem='CPF e senha foram confirmados, mas a biometria não correspondeu. Se estiver usando boné ou chapéu, retire-o e tente novamente. Repita a validação com o mesmo enquadramento e iluminação do cadastro.')
+            negar(db, request, 'verificacao', 'face_nao_corresponde', mensagem='CPF e senha foram confirmados, mas a biometria não correspondeu. Olhe de frente para a câmera, mantenha o rosto inteiro visível e fique parado durante a captura.')
 
         processamento['classificacao_interpretacao'] = resultado
         db.refresh(user, with_for_update=True)

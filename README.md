@@ -64,12 +64,14 @@ As cinco fases ficam reunidas na pasta `backend/app/processamento/`:
 | Fase | Arquivo | Operação |
 | --- | --- | --- |
 | 1. Aquisição | `sensoriamento.py` | Valida dimensões e decodifica os bytes RGB. |
-| 2. Pré-processamento | `pre_processamento.py` | Aplica suavização binomial e calcula a luminância. |
+| 2. Pré-processamento | `pre_processamento.py` | Calcula luminância suavizada para avaliar qualidade e fornece a normalização de iluminação do rosto alinhado. |
 | 3. Segmentação | `segmentacao.py` | Detecta um rosto, confere qualidade e alinha cinco pontos faciais em 112 × 112 pixels. |
-| 4. Extração de características | `extracao_caracteristicas.py` | Produz e normaliza o vetor AuraFace de 512 dimensões. |
+| 4. Extração de características | `extracao_caracteristicas.py` | Normaliza a iluminação do rosto alinhado antes de produzir e normalizar o vetor AuraFace de 512 dimensões. |
 | 5. Classificação/interpretação | `classificacao_interpretacao.py` | Compara assinaturas por distância de cosseno e aplica os limites de aceitação. |
 
 O cadastro recebe cinco quadros: **frente → um lado → lado oposto → frente → frente**. O primeiro lado é livre, sem depender do espelhamento da câmera. Os giros leves servem como barreira contra uma foto estática; a assinatura facial e sua consistência usam somente os três quadros frontais, evitando rejeitar uma pessoa por diferenças entre as poses laterais. O login recebe três quadros de frente. O servidor verifica rosto único, qualidade, movimento no cadastro e imagens repetidas.
+
+Cadastro e login usam a mesma normalização fotométrica: após o alinhamento em 112 × 112 pixels, o rosto passa por correção gamma adaptativa limitada e CLAHE no canal de luminância Y do espaço YCrCb, antes da extração AuraFace. O objetivo é reduzir o efeito de variações moderadas de iluminação. A detecção e as métricas de qualidade continuam usando a captura original; os limites de iluminação, contraste, saturação e foco são preservados. Áreas completamente escuras ou estouradas podem ter perdido detalhes e continuam exigindo nova captura. A normalização não exige reproduzir a iluminação do cadastro.
 
 Os dados do novo cadastro ficam somente na memória do frontend durante a captura. Nome, CPF, senha, nível e os cinco quadros são enviados juntos em `POST /api/usuarios`, e o usuário só é salvo após a validação facial. Sair antes do envio descarta os dados. Cadastros antigos sem biometria ficam fora da lista administrativa e podem ser concluídos refazendo o cadastro com o mesmo CPF; um cadastro completo com esse CPF continua sendo recusado.
 
@@ -83,6 +85,8 @@ Os modelos em `backend/.runtime/modelos` são preservados com tamanho e SHA-256 
 | AuraFace | `glintr100.onnx` | 260.694.151 bytes |
 
 Os pesos não foram convertidos ou reduzidos. Os limites de comparação permanecem em `0.30`, margem `0.03`, consistência `0.25` e foco mínimo `1.5`. A assinatura mantém versão 3 e algoritmo `auraface-v1-arcface-r100-yunet-112-v3`.
+
+A atualização de iluminação não exige recadastro nem altera assinaturas armazenadas. As novas capturas recebem o tratamento antes de gerar o vetor no mesmo modelo e espaço de características; a comparação continua usando as biometrias existentes. O banco e os demais dados do usuário são preservados.
 
 Durante a preparação, o terminal informa o tamanho de cada modelo. Se precisar baixá-lo, mostra os MB recebidos, o total e o percentual de progresso, com aviso de que o download pode demorar. Arquivos já instalados e íntegros são reutilizados; a instalação só é confirmada após a verificação de integridade.
 
@@ -106,6 +110,16 @@ As chamadas preservam os cookies `HttpOnly`. O desafio biométrico dura 120 segu
 A confirmação de credenciais retorna o nome do usuário para a saudação. Para funcionários, isso identifica apenas o desafio pendente: a sessão de acesso só é concedida após a verificação facial.
 
 Os quadros são processados em memória. CPF e assinatura são cifrados com AES-GCM; senhas usam Argon2id e tokens são armazenados como hashes. A comparação facial e a sequência de movimento não constituem prova de vida.
+
+## Verificar a normalização de iluminação
+
+Na raiz do projeto, execute os testes do backend com o ambiente preparado:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
+```
+
+Os testes automatizados verificam o comportamento do processamento. O ganho na precisão biométrica precisa ser avaliado com capturas reais da mesma pessoa sob diferentes luzes e de pessoas diferentes, comparando recusas e aceitações incorretas com o processamento anterior.
 
 ## Gerar o arquivo de entrega
 
