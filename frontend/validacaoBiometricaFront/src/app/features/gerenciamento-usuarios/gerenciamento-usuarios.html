@@ -22,7 +22,7 @@
         <tbody>
           @for (user of users(); track user.id) {
             <tr>
-              @if (editingId() === user.id) {
+              @if (editingId() === user.id && user.nivel !== 4) {
                 <td>
                   <label class="sr-only" [for]="'name-' + user.id">Nome</label>
                   <input [id]="'name-' + user.id" [value]="editing().nome" (input)="updateEditing('nome', $any($event.target).value)">
@@ -30,16 +30,19 @@
                   <input [id]="'password-' + user.id" type="password" placeholder="Nova senha (opcional)" [value]="editing().senha" (input)="updateEditing('senha', $any($event.target).value)">
                 </td>
                 <td><select [value]="editing().nivel" (change)="updateEditing('nivel', $any($event.target).value)">
-                  <option [value]="1">1</option><option [value]="2">2</option><option [value]="3">3</option><option [value]="4">4 (admin)</option>
+                  <option [value]="1">1</option><option [value]="2">2</option><option [value]="3">3</option>
+                  <option [value]="4" disabled>4 (administrador reservado)</option>
                 </select></td>
               } @else {
                 <td>{{ user.nome }}</td><td>{{ user.nivel === 4 ? '4 (admin)' : user.nivel }}</td>
               }
               <td>{{ user.ativo ? 'Ativo' : 'Inativo' }}</td>
               <td class="actions">
-                @if (editingId() === user.id) {
+                @if (editingId() === user.id && user.nivel !== 4) {
                   <button type="button" [disabled]="savingId() === user.id" (click)="saveEditing(user)">Salvar</button>
                   <button type="button" (click)="cancelEditing()">Cancelar</button>
+                } @else if (user.nivel === 4) {
+                  <span>Administrador reservado</span>
                 } @else {
                   <button type="button" (click)="startEditing(user)">Editar</button>
                   <button type="button" [disabled]="savingId() === user.id" (click)="toggleActive(user)">{{ user.ativo ? 'Desativar' : 'Ativar' }}</button>
