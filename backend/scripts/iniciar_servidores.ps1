@@ -1,7 +1,8 @@
 param(
     [string]$Python,
     [switch]$VerificarPortas,
-    [switch]$PrepararPython
+    [switch]$PrepararPython,
+    [string]$Etapa
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +10,20 @@ $Backend = Split-Path -Parent $PSScriptRoot
 $Root = Split-Path -Parent $Backend
 $Frontend = Join-Path $Root 'frontend\validacaoBiometricaFront'
 $Runtime = Join-Path $Backend '.runtime'
+
+function Write-Stage([string]$Message) {
+    Write-Host ''
+    if (-not $env:NO_COLOR -and $env:TERM -ne 'dumb' -and -not [Console]::IsOutputRedirected) {
+        Write-Host $Message -ForegroundColor Blue
+    } else {
+        Write-Host $Message
+    }
+}
+
+if ($Etapa) {
+    Write-Stage $Etapa
+    exit 0
+}
 
 if ($PrepararPython) {
     $ambiente = Join-Path $Root '.venv'
@@ -117,14 +132,17 @@ try {
     $apiError = Join-Path $Runtime 'api-error.log'
     $frontError = Join-Path $Runtime 'frontend-error.log'
 
-    Write-Host 'Iniciando a API local...'
+    Write-Stage '[5/6] API local | Iniciando o servidor...'
     $api = Start-Server -Executable $Python -Directory $Backend -LogName 'api' `
         -Arguments @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000')
+    Write-Stage '[API] Aguardando o servidor responder...'
     Wait-ApiReady -Process $api -ErrorLog $apiError
 
+    Write-Stage '[6/6] Frontend | Iniciando a compilacao e o servidor Angular...'
     $front = Start-Server -Executable $env:ComSpec -Directory $Frontend -LogName 'frontend' `
         -Arguments @('/d', '/c', 'npm.cmd', 'start', '--', '--host', 'localhost', '--port', '4200', '--open')
 
+    Write-Host ''
     Write-Host 'API: http://localhost:8000/docs'
     Write-Host 'Frontend: http://localhost:4200 (abrira no navegador apos a compilacao)'
     Write-Host "Logs: $Runtime"

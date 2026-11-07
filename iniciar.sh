@@ -9,6 +9,17 @@ LOG="$BACKEND/.runtime/api.log"
 API_PID=""
 FRONTEND_PID=""
 
+AZUL_CLARO=""
+RESET_COR=""
+if [[ -t 1 && "${TERM:-}" != "dumb" && -z "${NO_COLOR:-}" ]]; then
+    AZUL_CLARO=$'\033[94m'
+    RESET_COR=$'\033[0m'
+fi
+
+etapa() {
+    printf '\n%s%s%s\n' "$AZUL_CLARO" "$1" "$RESET_COR"
+}
+
 cleanup() {
     local status=$?
     trap - EXIT
@@ -70,7 +81,7 @@ else
         exit 1
     fi
 
-    echo "Criando o ambiente virtual em $ROOT/.venv com $PYTHON_BASE..."
+    etapa "[AMBIENTE] Criando o ambiente virtual em $ROOT/.venv com $PYTHON_BASE..."
     if ! "$PYTHON_BASE" -m venv "$ROOT/.venv"; then
         echo "Falha ao criar .venv. Confira os modulos venv/ensurepip e as permissoes da pasta." >&2
         exit 1
@@ -125,27 +136,27 @@ check_ports 8000 4200
 
 cd "$BACKEND"
 echo "Usando o ambiente virtual: $PYTHON"
-echo "Instalando as dependencias do backend..."
+etapa "[1/6] Dependencias do backend (requirements.txt) | Instalando..."
 "$PYTHON" -m pip install -r "$BACKEND/requirements.txt"
 
-echo "Preparando os modelos faciais..."
+etapa "[2/6] Modelos faciais (arquivos ONNX) | Verificando e baixando os modelos ausentes..."
 "$PYTHON" "$BACKEND/scripts/preparar_modelos.py"
 
-echo "Preparando o banco MySQL..."
+etapa "[3/6] Banco MySQL | Preparando o banco de dados e as tabelas..."
 "$PYTHON" -m app.inicializar
 
-echo "Instalando as dependencias do frontend..."
+etapa "[4/6] Dependencias do frontend (npm) | Instalando..."
 cd "$FRONTEND"
 npm install
 
 check_ports 8000 4200
 mkdir -p "$BACKEND/.runtime"
 cd "$BACKEND"
-echo "Iniciando a API local..."
+etapa "[5/6] API local | Iniciando o servidor..."
 "$PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >>"$LOG" 2>&1 &
 API_PID=$!
 
-echo "Aguardando a API responder..."
+printf '%s[API] Aguardando a API responder...%s\n' "$AZUL_CLARO" "$RESET_COR"
 READY=0
 for _ in {1..30}; do
     if ! kill -0 "$API_PID" 2>/dev/null; then
@@ -181,7 +192,8 @@ fi
 
 echo "API iniciada: http://127.0.0.1:8000/docs"
 echo "Logs da API: $LOG"
-echo "Iniciando o frontend em http://localhost:4200. Use Ctrl+C para encerrar os dois servidores."
+etapa "[6/6] Frontend | Iniciando a compilacao e o servidor Angular..."
+echo "Frontend: http://localhost:4200. Use Ctrl+C para encerrar os dois servidores."
 echo "O navegador abrira automaticamente quando o frontend estiver pronto."
 cd "$FRONTEND"
 # Sessao propria permite encerrar tambem o processo Angular iniciado pelo npm.

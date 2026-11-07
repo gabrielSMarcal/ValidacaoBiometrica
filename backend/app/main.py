@@ -425,6 +425,34 @@ def hash_token(token: str) -> str:
 # Modelos locais: carregamento e inferência
 
 
+def azul_claro(texto: str) -> str:
+    if not sys.stdout.isatty() or os.environ.get('NO_COLOR') or os.environ.get('TERM') == 'dumb':
+        return texto
+
+    if os.name == 'nt':
+        # O console clássico do Windows exige habilitar sequências ANSI.
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        try:
+            console = ctypes.WinDLL('kernel32', use_last_error=True)
+            console.GetConsoleMode.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+            console.GetConsoleMode.restype = wintypes.BOOL
+            console.SetConsoleMode.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+            console.SetConsoleMode.restype = wintypes.BOOL
+            handle = msvcrt.get_osfhandle(sys.stdout.fileno())
+            modo = wintypes.DWORD()
+            if not console.GetConsoleMode(handle, ctypes.byref(modo)):
+                return texto
+            if not console.SetConsoleMode(handle, modo.value | 0x0004):
+                return texto
+        except (AttributeError, OSError, ValueError):
+            return texto
+
+    return f'\033[94m{texto}\033[0m'
+
+
 class ModeloFacialIndisponivel(RuntimeError):
     """Os modelos locais ou suas dependências não estão disponíveis."""
 
@@ -498,9 +526,9 @@ def _exigir_arquivo(modelo: _Modelo) -> Path:
 def _progresso_modelo(modelo: _Modelo, recebidos: int, final: bool = False) -> None:
     percentual = recebidos / modelo.tamanho * 100
     terminal = sys.stdout.isatty()
-    mensagem = (f'{modelo.arquivo}: {recebidos / 1_000_000:.2f} MB / '
+    mensagem = (f'[DOWNLOAD] {modelo.arquivo}: {recebidos / 1_000_000:.2f} MB / '
                 f'{modelo.tamanho / 1_000_000:.2f} MB ({percentual:.1f}%)')
-    print(('\r' if terminal else '') + mensagem,
+    print(('\r' if terminal else '') + azul_claro(mensagem),
           end='\n' if final or not terminal else '', flush=True)
 
 
@@ -538,7 +566,7 @@ def _baixar_modelo(modelo: _Modelo, mostrar_progresso: bool = False) -> None:
             if mostrar_progresso:
                 _progresso_modelo(modelo, recebidos, final=True)
                 progresso_aberto = False
-                print('Verificando a integridade do arquivo baixado...', flush=True)
+                print(azul_claro(f'[MODELOS] Verificando a integridade de {modelo.arquivo}...'), flush=True)
             if recebidos != modelo.tamanho or checksum.hexdigest() != modelo.sha256:
                 raise ModeloFacialIndisponivel('O modelo recebido falhou na verificação de integridade.')
             destino.flush()
@@ -546,7 +574,7 @@ def _baixar_modelo(modelo: _Modelo, mostrar_progresso: bool = False) -> None:
         os.replace(parcial, DIRETORIO_MODELOS / modelo.arquivo)
         parcial = None
         if mostrar_progresso:
-            print(f'{modelo.arquivo}: instalado e verificado.', flush=True)
+            print(f'[OK] {modelo.arquivo}: instalado e verificado.', flush=True)
     except ModeloFacialIndisponivel:
         raise
     except Exception as exc:
@@ -572,11 +600,13 @@ def preparar_modelos(mostrar_progresso: bool = False) -> None:
     with _PREPARACAO_LOCK:
         for modelo in _MODELOS:
             if mostrar_progresso:
-                print(f'Verificando {modelo.arquivo} ({modelo.tamanho / 1_000_000:.2f} MB)...', flush=True)
+                mensagem = (f'[MODELOS] Verificando arquivo local: {modelo.arquivo} '
+                            f'({modelo.tamanho / 1_000_000:.2f} MB)...')
+                print(azul_claro(mensagem), flush=True)
             if not _arquivo_valido(modelo):
                 _baixar_modelo(modelo, mostrar_progresso=mostrar_progresso)
             elif mostrar_progresso:
-                print('Arquivo já disponível e verificado; download dispensado.', flush=True)
+                print(f'[OK] {modelo.arquivo}: arquivo já disponível e verificado; download dispensado.', flush=True)
 
 
 def _carregar_detector():

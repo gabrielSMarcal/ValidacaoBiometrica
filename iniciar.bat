@@ -7,6 +7,7 @@ set "FRONTEND=%ROOT%frontend\validacaoBiometricaFront"
 set "SERVIDORES=%BACKEND%\scripts\iniciar_servidores.ps1"
 
 rem Ajusta o Python incluido no ambiente quando o projeto muda de pasta.
+call :etapa "[AMBIENTE] Verificando o Python e o ambiente virtual..."
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SERVIDORES%" -PrepararPython
 if errorlevel 1 exit /b 1
 
@@ -33,7 +34,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Criando o ambiente virtual .venv na raiz do projeto...
+call :etapa "[AMBIENTE] Criando o ambiente virtual .venv na raiz do projeto..."
 "%PYTHON_BASE%" %PYTHON_ARGUMENTOS% -m venv "%ROOT%.venv"
 if errorlevel 1 (
     echo Falha ao criar a .venv. Confira as permissoes da pasta e a instalacao do Python.
@@ -70,17 +71,17 @@ if errorlevel 1 exit /b 1
 pushd "%BACKEND%"
 if errorlevel 1 exit /b 1
 
-echo Instalando as dependencias do backend...
+call :etapa "[1/6] Dependencias do backend (requirements.txt) | Instalando..."
 set "ERRO=Falha na instalacao das dependencias do backend."
 "%PYTHON%" -m pip install -r requirements.txt
 if errorlevel 1 goto :falha_preparacao
 
-echo Preparando os modelos faciais...
+call :etapa "[2/6] Modelos faciais (arquivos ONNX) | Verificando e baixando os modelos ausentes..."
 set "ERRO=Falha na preparacao dos modelos faciais."
 "%PYTHON%" scripts\preparar_modelos.py
 if errorlevel 1 goto :falha_preparacao
 
-echo Preparando o banco MySQL...
+call :etapa "[3/6] Banco MySQL | Preparando o banco de dados e as tabelas..."
 set "ERRO=Falha na preparacao do MySQL. Confira o servico e backend\.env."
 "%PYTHON%" -m app.inicializar
 if errorlevel 1 goto :falha_preparacao
@@ -89,7 +90,7 @@ popd
 pushd "%FRONTEND%"
 if errorlevel 1 exit /b 1
 
-echo Instalando as dependencias do frontend...
+call :etapa "[4/6] Dependencias do frontend (npm) | Instalando..."
 set "ERRO=Falha na instalacao das dependencias npm."
 call npm.cmd install
 if errorlevel 1 goto :falha_preparacao
@@ -104,6 +105,10 @@ exit /b %ERRORLEVEL%
 popd
 echo %ERRO%
 exit /b 1
+
+:etapa
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SERVIDORES%" -Etapa "%~1"
+exit /b 0
 
 :selecionar_python_base
 py.exe -3.12 -c "import sys, venv, ensurepip; sys.exit(sys.version_info[:2] != (3, 12))" >nul 2>&1
