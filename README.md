@@ -2,39 +2,62 @@
 
 Autenticação com CPF, senha e verificação facial 1:1. O frontend usa Angular; o backend usa FastAPI, MySQL, YuNet e AuraFace com ONNX Runtime. TensorFlow e Keras não fazem parte da execução atual.
 
-## Executar no Windows
+## Requisitos de instalação
 
-1. Inicie o MySQL e confira a configuração em `backend/.env`.
-2. Tenha Python 3.12 completo e Node.js/npm compatível com Angular 22 instalados, com as portas 8000 e 4200 disponíveis.
-3. Execute na raiz:
+Para executar o projeto após clonar o repositório, instale e configure:
+
+| Requisito | Configuração necessária |
+| --- | --- |
+| Python | **3.12**, com `pip`, `venv` e `ensurepip`. No Windows, habilite o launcher `py` ou adicione o Python ao `PATH`. |
+| Node.js | **22**, na versão **22.22.3 ou superior da linha 22.x**, com npm. |
+| MySQL | Servidor instalado e ativo. O usuário indicado no `.env` precisa existir e ter permissões para acessar o banco e criar/atualizar suas tabelas. |
+| Configuração | Arquivo `.env` disponibilizado pela equipe, salvo em **`backend/.env`**, com conexão MySQL e administrador inicial configurados. |
+| Internet | Necessária para instalar dependências, baixar os modelos faciais e carregar os recursos MediaPipe usados pelo navegador. |
+| Câmera | Disponível e autorizada no navegador para cadastro e reconhecimento facial. |
+| Portas | **8000** e **4200** disponíveis para a API e o frontend. |
+
+As pastas `.venv`, `node_modules` e `.runtime` **não precisam acompanhar o repositório**. Os inicializadores criam o ambiente e os diretórios necessários, instalam as dependências e baixam os modelos ausentes. Instalar somente `backend/requirements.txt` cobre as dependências Python; o frontend também depende dos pacotes npm.
+
+## Primeira execução no Windows
+
+1. Instale os requisitos acima e clone o repositório.
+2. Copie o `.env` disponibilizado para a pasta `backend`, mantendo o nome exato `.env`.
+3. Confira se a conexão do `.env` corresponde ao MySQL dessa máquina e inicie o serviço do banco.
+4. Abra um terminal na raiz do projeto, onde está o arquivo `iniciar.bat`, e execute:
 
 ```powershell
 .\iniciar.bat
 ```
 
-O pacote inclui a `.venv`, um Python 3.12.10 para Windows de 64 bits e os dois modelos. O inicializador Windows ajusta o caminho desse Python se a pasta do projeto mudar. Ambos os inicializadores reutilizam a `.venv` funcional da raiz ou de `backend`; quando não houver ambiente e a pasta `.venv` da raiz estiver ausente, criam-na automaticamente usando o Python 3.12 instalado na máquina. Um ambiente existente inválido é preservado, com uma mensagem para revisão.
+O inicializador realiza automaticamente estas etapas:
 
-Depois, instalam as dependências, preparam os modelos e o banco, aguardam a API responder e abrem automaticamente a página no navegador após a compilação do frontend. A instalação Python/npm, o download de modelos ausentes e os recursos MediaPipe carregados pelo navegador exigem internet.
+1. Cria a `.venv` na raiz usando o Python 3.12 instalado, quando não houver um ambiente funcional.
+2. Instala as dependências de `backend/requirements.txt`.
+3. Cria `backend/.runtime/modelos` e baixa os modelos YuNet e AuraFace ausentes, verificando tamanho e SHA-256.
+4. Prepara o banco, as tabelas, o administrador inicial e os dossiês demonstrativos.
+5. Instala as dependências npm do frontend.
+6. Inicia a API e o frontend e abre a aplicação no navegador após a compilação.
+
+O download inicial dos modelos soma aproximadamente **261 MB** e pode demorar conforme a conexão. Nas próximas execuções, modelos locais íntegros são reutilizados. Se já existir uma `.venv` funcional na raiz ou em `backend`, ela também é reutilizada. Uma `.venv` existente e inválida na raiz é preservada e precisa ser revisada antes de continuar.
 
 - Aplicação: http://localhost:4200
 - API e Swagger: http://localhost:8000/docs
 
 Mantenha o terminal aberto e use **Ctrl+C** para encerrar os servidores. Os logs ficam em `backend/.runtime/` e são renovados a cada inicialização.
 
-No Linux, execute `bash ./iniciar.sh`. O Python 3.12 deve estar disponível como `python3.12`, `python3` ou `python`, com os módulos `venv` e `ensurepip`; o script cria a `.venv` automaticamente quando ela não existe. Um ambiente Windows não é compatível com Linux: mantenha a `.venv` própria do sistema ou mova a cópia Windows para outro local antes da primeira execução.
+## Primeira execução no Linux
 
-O MySQL/MariaDB precisa estar instalado e ativo antes da execução; os scripts não instalam o servidor de banco. Copie o `.env` fornecido pela equipe para `backend/.env`, com conexão e administrador inicial configurados. O Node deve atender à faixa do Angular instalado: `^22.22.3 || ^24.15.0 || >=26.0.0`. No Windows, o criador do ambiente procura primeiro `py -3.12` e depois um Python 3.12 disponível no `PATH`.
+Instale os mesmos requisitos, coloque o `.env` em `backend/.env` e inicie o MySQL. Na raiz do projeto, execute:
+
+```bash
+bash ./iniciar.sh
+```
+
+O Python 3.12 deve estar disponível como `python3.12`, `python3` ou `python`, com os módulos `venv` e `ensurepip`. O script executa a mesma preparação automática do ambiente, dependências, modelos e banco. Use uma `.venv` própria do Linux; um ambiente criado no Windows não é compatível.
 
 ## Configuração do banco e do administrador
 
-Arquivos `.env`, chaves e bancos são locais e não acompanham o ZIP. Se já existe uma configuração da equipe, preserve-a. Em uma instalação nova no Windows, prepare o ambiente antes de usar Python diretamente:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File backend\scripts\iniciar_servidores.ps1 -PrepararPython
-.\.venv\Scripts\python.exe backend\scripts\configurar.py
-```
-
-O configurador cria `backend/.env` sem sobrescrever um arquivo existente. Ajuste:
+O `.env` é disponibilizado separadamente pela equipe e deve ficar em `backend/.env`; ele é ignorado pelo Git. Use somente esse arquivo; não é necessário manter um `.env` na raiz do projeto. Preserve a configuração fornecida e ajuste os dados de conexão quando o MySQL estiver em outra máquina ou usar credenciais diferentes:
 
 | Variável | Finalidade |
 | --- | --- |
@@ -45,13 +68,13 @@ O configurador cria `backend/.env` sem sobrescrever um arquivo existente. Ajuste
 | `BIOMETRIC_KEY` | Chave original de 32 bytes em base64 para os dados cifrados. |
 | `ALLOWED_ORIGINS` | Origens web autorizadas; os padrões incluem `http://localhost:4200`. |
 
-Para gerar o hash da senha inicial, execute e cole o resultado em `ADMIN_PASSWORD_HASH`:
+O `.env` fornecido deve conter `ADMIN_CPF` e `ADMIN_PASSWORD_HASH` válidos para a criação do administrador no primeiro acesso ao banco. Se precisar gerar outro hash de senha, com a `.venv` e as dependências Python já instaladas, execute na raiz e cole o resultado em `ADMIN_PASSWORD_HASH`:
 
 ```powershell
 .\.venv\Scripts\python.exe -c "from getpass import getpass; from argon2 import PasswordHasher; print(PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2).hash(getpass('Senha inicial do administrador: ')))"
 ```
 
-O inicializador cria o banco e as tabelas quando as permissões MySQL permitem; `backend/sql/criar_banco.sql` é a alternativa manual. Um administrador existente mantém sua senha. Alterações conhecidas de estrutura preservam os cadastros existentes.
+O MySQL precisa estar instalado e ativo antes da execução; os scripts não instalam o servidor nem criam o usuário de conexão. O inicializador cria o banco quando necessário e permitido, prepara as tabelas e insere os dados iniciais. Se precisar preparar o banco e o usuário manualmente, use `backend/sql/criar_banco.sql`, ajustando a senha para corresponder ao `.env`; as tabelas continuam sendo preparadas pelo inicializador. Um administrador existente mantém sua senha. Alterações conhecidas de estrutura preservam os cadastros existentes.
 
 Uma cópia de um banco existente exige a **mesma chave biométrica**. Quando não houver `BIOMETRIC_KEY` no ambiente ou no `.env`, a chave fica em `backend/.runtime/biometric.key`; preserve esse arquivo ao transferir o banco. Assinaturas de algoritmos anteriores exigem recadastro biométrico.
 
