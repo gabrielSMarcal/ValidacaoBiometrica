@@ -1,0 +1,6 @@
+Acesso do admin
+
+CPF: 20275654001
+Senha: Unipadmin9406
+
+Abrir arquivo iniciar.bat (Windows) ou iniciar.sh (Linux) e aguardar o carregamento do .venv, modelos e instalação do Node.
